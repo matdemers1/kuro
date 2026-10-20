@@ -40,6 +40,15 @@ export default defineConfig(
     languageOptions: { globals: globals.node },
   },
   {
+    files: ['apps/web/public/sw.js'],
+    languageOptions: { globals: globals.serviceworker },
+  },
+  {
+    // Code evaluated inside the page Playwright drives.
+    files: ['scripts/render-icons.mjs'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
+  {
     rules: {
       // A swallowed sync or matching error becomes a silently wrong history.
       'no-empty': ['error', { allowEmptyCatch: false }],

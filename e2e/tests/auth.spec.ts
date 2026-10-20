@@ -75,6 +75,25 @@ test('Sign in with D3 Auth signs the linked owner in, by (iss, sub)', async ({ p
   await expect(page.getByRole('heading', { name: 'Up Next' })).toBeVisible();
 });
 
+test('offline, the installed app opens read-only from its cache (KURO-REQ-019)', async ({ page, context }) => {
+  await page.goto('/');
+  if (await page.getByRole('form', { name: 'Sign in' }).isVisible({ timeout: 2000 }).catch(() => false)) {
+    await page.getByRole('button', { name: 'Sign in with D3 Auth' }).click();
+    if (await page.locator('input[name="login"]').isVisible({ timeout: 3000 }).catch(() => false)) await signInAtIssuer(page, 'owner-sub');
+  }
+  await expect(page.getByRole('heading', { name: 'Up Next' })).toBeVisible();
+  // Wait for the service worker to control the page, then visit once more so reads are cached.
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Up Next' })).toBeVisible();
+
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Up Next' })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('offline');
+  await context.setOffline(false);
+});
+
 test('an identity nobody linked is refused — no back door around closed signup', async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();

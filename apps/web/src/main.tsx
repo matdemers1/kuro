@@ -10,3 +10,10 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 );
+
+// Offline read-only cache (KURO-REQ-019); never in development, where it would cache stale builds.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js');
+  });
+}

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useOnline } from '../lib/online.js';
 import { navigate } from '../lib/router.js';
 import { CalendarIcon, LibraryIcon, PlayIcon, YouIcon } from './icons.js';
 
@@ -22,6 +23,7 @@ function go(e: React.MouseEvent, path: string) {
 /** Four tabs at the bottom of a phone; the same four as a sidebar from 1024px (KURO-T-1.6). */
 export function AppShell({ path, children }: { path: string; children: ReactNode }) {
   const active = activeTab(path);
+  const online = useOnline();
   return (
     <div className="min-h-dvh bg-canvas text-ink lg:flex">
       <nav aria-label="Main" className="hidden w-60 shrink-0 flex-col gap-1 border-r border-line bg-surface px-4 py-6 lg:flex">
@@ -36,7 +38,14 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
           </a>
         ))}
       </nav>
-      <div className="flex-1 pb-20 lg:pb-0">{children}</div>
+      <div className="flex-1 pb-20 lg:pb-0">
+        {!online && (
+          <p role="status" className="sticky top-0 z-10 bg-raised px-4 py-2 text-center text-[13px] text-muted">
+            You’re offline. Showing what Kurō last saw; changes need a connection.
+          </p>
+        )}
+        <fieldset disabled={!online} className="contents">{children}</fieldset>
+      </div>
       <nav aria-label="Tabs" className="fixed inset-x-0 bottom-0 flex justify-around border-t border-line bg-surface px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] lg:hidden">
         {TABS.map(({ label, path: p, icon: Icon }) => (
           <a key={p} href={p} onClick={(e) => { go(e, p); }} aria-current={active === p ? 'page' : undefined} className={`flex min-w-16 flex-col items-center gap-0.5 text-[11px] font-medium tracking-[0.3px] ${active === p ? 'text-ink [&_svg]:text-shu' : 'text-faint'}`}>
