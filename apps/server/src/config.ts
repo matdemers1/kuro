@@ -19,6 +19,12 @@ const Env = z.object({
   AUTH_PEPPER: Secret32.optional(),
   /** First-run gate (KURO-REQ-055). Unused once the owner exists. */
   SETUP_TOKEN: z.string().min(16).optional(),
+  /** pg_dump output: pre-migration, manual and Shipyard's backup step. */
+  BACKUP_DIR: z.string().default('/data/backups'),
+  /** Take a dump before applying migrations to a database that already holds data. */
+  BACKUP_BEFORE_MIGRATE: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  /** The sidecar, on the compose network only (KURO-REQ-056). */
+  KURO_CR_URL: z.url().default('http://kuro-cr:8080'),
   D3AUTH_ISSUER: z.url().optional(),
   D3AUTH_CLIENT_ID: z.string().min(1).optional(),
   D3AUTH_CLIENT_SECRET: z.string().min(1).optional(),

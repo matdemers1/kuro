@@ -1,0 +1,48 @@
+# Kurō on the Zima — deployed by Shipyard (shipyard.kuro.yml). On the host: /DATA/kuro/compose.yml.
+#
+# Literal values only: no `${…}` anywhere. Shipyard rewrites the two `image:` lines to
+# `<repo>:sha-<40 hex>` itself. The `sha-0000…` tags are placeholders zima-onboard.sh replaces.
+#
+# No host ports: ingress is the Cloudflare Tunnel overlay (compose.tunnel.yml) only, and the
+# sidecar is reachable from kuro-server alone, over this project's network (KURO-REQ-056).
+name: kuro
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    env_file:
+      - /DATA/kuro/postgres.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kuro -d kuro"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kuro-cr:
+    image: ghcr.io/matdemers1/kuro-cr:sha-0000000000000000000000000000000000000000
+    restart: unless-stopped
+    read_only: true
+
+  kuro-server:
+    image: ghcr.io/matdemers1/kuro-server:sha-0000000000000000000000000000000000000000
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - /DATA/kuro/server.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kuro-cr:
+        condition: service_healthy
+    volumes:
+      - images:/data/images
+      # pg_dump output: pre-migration, manual and Shipyard's backup step (BACKUP_DIR=/data/backups).
+      - backups:/data/backups
+
+volumes:
+  pgdata: {}
+  images: {}
+  backups: {}

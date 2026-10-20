@@ -1,0 +1,12 @@
+# Host-only overlay: the Cloudflare Tunnel that is kuro.dormice.ai's only ingress. The tunnel is
+# remotely managed; its ingress rule (kuro.dormice.ai → http://kuro-server:3300) lives in Cloudflare.
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.0
+    restart: unless-stopped
+    # HTTP/2 over TCP, not QUIC: on this host QUIC links drop and requests hang (OVF-D-081).
+    command: tunnel --no-autoupdate --protocol http2 run
+    env_file:
+      - /DATA/kuro/tunnel.env
+    depends_on:
+      - kuro-server

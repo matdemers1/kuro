@@ -1,0 +1,9 @@
+{
+  "client_id": "kuro",
+  "name": "Kurō",
+  "client_type": "confidential_web",
+  "description": "Personal anime tracker at kuro.dormice.ai (a Dormice app). Confidential web client: client_secret_basic at the token endpoint, PKCE S256 on every authorization request. Kurō links an identity to its one owner by (iss, sub) and never provisions accounts.",
+  "redirect_uris": ["https://kuro.dormice.ai/auth/oidc/callback"],
+  "post_logout_redirect_uris": ["https://kuro.dormice.ai/"],
+  "roles": [{ "key": "owner", "display": "Owner", "description": "The one person Kurō belongs to.", "default": true }]
+}
