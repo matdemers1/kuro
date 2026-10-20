@@ -46,6 +46,43 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  integration:
+    needs: unit
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kuro
+          POSTGRES_PASSWORD: kuro
+          POSTGRES_DB: kuro
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kuro -d kuro"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      # The suite refuses any database whose name does not end in _test, and recreates it each run.
+      DATABASE_URL: postgresql://kuro:kuro@127.0.0.1:5432/kuro_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Migration drift check — schema.prisma and migrations/ must agree
+        working-directory: apps/server
+        env:
+          SHADOW_DATABASE_URL: postgresql://kuro:kuro@127.0.0.1:5432/shadow
+        run: |
+          PGPASSWORD=kuro psql -h 127.0.0.1 -U kuro -d kuro -c 'CREATE DATABASE shadow;'
+          pnpm exec prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema prisma/schema.prisma \
+            --exit-code
+      - run: pnpm --filter kuro-server test:integration
+
   # The sidecar: GitHub's ubuntu image ships rustup, so no third-party toolchain action is needed.
   sidecar:
     runs-on: ubuntu-latest
@@ -60,7 +97,7 @@ jobs:
       - run: cargo test --locked
 
   images:
-    needs: [unit, sidecar]
+    needs: [integration, sidecar]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

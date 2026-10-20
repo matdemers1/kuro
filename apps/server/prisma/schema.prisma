@@ -1,0 +1,307 @@
+// Kurō schema v0 (KURO-T-0.2). The shape is foreman://KURO/data_model.
+//
+// Three rules this file exists to keep:
+//   1. `play` is the History Vault and is append-only — a trigger in the migration refuses UPDATE
+//      and DELETE on it (KURO-REQ-004). History Crunchyroll later forgets stays here.
+//   2. Nothing derived lives in these v0 tables. Show status, progress and Up Next arrive as
+//      rebuildable tables in KURO-T-1.5 (KURO-ADR-004).
+//   3. The Crunchyroll refresh token is stored only as ciphertext (KURO-ADR-008).
+//
+// Auth tables follow Foreman's shape so its auth module ports without change (KURO-ADR-007).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────
+
+enum AuthMethod {
+  password
+  oidc
+}
+
+enum ThrottleScope {
+  account
+  ip
+}
+
+/// Where the Crunchyroll link stands. `paused` means sync stopped on an expired/revoked session
+/// and waits for a re-link (KURO-REQ-007); `blocked` means Cloudflare or a 401/403 refused it.
+enum CrConnectionState {
+  linked
+  paused
+  blocked
+}
+
+enum SyncKind {
+  backfill
+  delta
+}
+
+enum SyncStatus {
+  running
+  succeeded
+  failed
+}
+
+enum CrParentType {
+  series
+  movie_listing
+}
+
+// ─── The owner and their sign-in ─────────────────────────────────────────
+
+/// Kurō has one owner (KURO-REQ-055), but the table does not pretend otherwise: a second row is
+/// refused by the setup flow, not by the schema.
+model User {
+  id          String @id @default(uuid(7)) @db.Uuid
+  email       String @unique
+  displayName String @map("display_name")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  credential   Credential?
+  identities   Identity[]
+  sessions     Session[]
+  crConnection CrConnection?
+  changes      ChangeLog[]
+
+  @@map("user")
+}
+
+model Credential {
+  userId String @id @map("user_id") @db.Uuid
+
+  passwordHash      String    @map("password_hash")
+  passwordUpdatedAt DateTime  @default(now()) @map("password_updated_at") @db.Timestamptz(6)
+  /// Encrypted. Null until TOTP is enrolled.
+  totpSecret        String?   @map("totp_secret")
+  totpConfirmedAt   DateTime? @map("totp_confirmed_at") @db.Timestamptz(6)
+  /// Last accepted TOTP step, so a code cannot be replayed inside its window.
+  totpLastStep      BigInt?   @map("totp_last_step")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("credential")
+}
+
+/// A Sign in with D3 Auth identity. Linked by (iss, sub), never by email (GL-001).
+model Identity {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  iss         String
+  sub         String
+  claims      Json?
+  lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([iss, sub])
+  @@index([userId])
+  @@map("identity")
+}
+
+model Session {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  /// The cookie carries the token; only its hash is stored, so a leaked row cannot be replayed.
+  tokenHash  String     @unique @map("token_hash")
+  method     AuthMethod
+  idTokenSub String?    @map("id_token_sub")
+  ip         String?
+  userAgent  String?    @map("user_agent")
+  lastSeenAt DateTime   @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  expiresAt  DateTime   @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime?  @map("revoked_at") @db.Timestamptz(6)
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("session")
+}
+
+model AuthThrottle {
+  scope ThrottleScope
+  key   String
+
+  failures      Int      @default(0)
+  nextAllowedAt DateTime @map("next_allowed_at") @db.Timestamptz(6)
+  lastFailureAt DateTime @default(now()) @map("last_failure_at") @db.Timestamptz(6)
+
+  @@id([scope, key])
+  @@map("auth_throttle")
+}
+
+// ─── Crunchyroll link and sync ───────────────────────────────────────────
+
+model CrConnection {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  /// Crunchyroll's account and profile IDs. Never committed anywhere (KURO-REQ-057).
+  accountId String  @map("account_id")
+  profileId String? @map("profile_id")
+  /// Kurō's own stable device ID, used for the password grant and every refresh (KURO-ADR-001).
+  deviceId  String  @map("device_id")
+
+  /// AES-256-GCM ciphertext of the refresh token, base64; the key lives only in KURO_SECRET_KEY.
+  refreshTokenCiphertext String @map("refresh_token_ciphertext")
+  refreshTokenNonce      String @map("refresh_token_nonce")
+
+  state         CrConnectionState @default(linked)
+  stateReason   String?           @map("state_reason")
+  /// The newest date_played seen; delta sync stops at the first page wholly older than this.
+  highWaterMark DateTime?         @map("high_water_mark") @db.Timestamptz(6)
+  lastSuccessAt DateTime?         @map("last_success_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  syncRuns SyncRun[]
+
+  @@map("cr_connection")
+}
+
+model SyncRun {
+  id             String     @id @default(uuid(7)) @db.Uuid
+  crConnectionId String     @map("cr_connection_id") @db.Uuid
+  kind           SyncKind
+  status         SyncStatus @default(running)
+
+  /// Backfill checkpoint: the last history page fully stored, so a restart resumes after it.
+  lastPage      Int     @default(0) @map("last_page")
+  pagesTotal    Int?    @map("pages_total")
+  playsObserved Int     @default(0) @map("plays_observed")
+  playsNew      Int     @default(0) @map("plays_new")
+  error         String?
+
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  crConnection CrConnection @relation(fields: [crConnectionId], references: [id], onDelete: Cascade)
+  plays        Play[]
+
+  @@index([crConnectionId, startedAt])
+  @@map("sync_run")
+}
+
+/// The History Vault: one row per watch-history observation, append-only (KURO-REQ-004). The
+/// same episode played again on a later date is a new row — that is how rewatches are seen.
+model Play {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  crEpisodeId String   @map("cr_episode_id")
+  /// Crunchyroll's series or movie listing the episode belongs to.
+  crParentId   String       @map("cr_parent_id")
+  crParentType CrParentType @map("cr_parent_type")
+  datePlayed   DateTime     @map("date_played") @db.Timestamptz(6)
+  playheadS    Int          @map("playhead_s")
+  fullyWatched Boolean      @map("fully_watched")
+  /// The raw entry as Crunchyroll returned it, so later parsing fixes never need a re-fetch.
+  raw          Json
+
+  syncRunId  String   @map("sync_run_id") @db.Uuid
+  observedAt DateTime @default(now()) @map("observed_at") @db.Timestamptz(6)
+
+  syncRun SyncRun @relation(fields: [syncRunId], references: [id], onDelete: Restrict)
+
+  @@unique([crEpisodeId, datePlayed])
+  @@index([datePlayed])
+  @@index([crParentId])
+  @@map("play")
+}
+
+// ─── Crunchyroll catalog mirror (cache of what plays point at) ────────────
+
+model CrSeries {
+  id          String  @id
+  title       String
+  slugTitle   String? @map("slug_title")
+  description String?
+  raw         Json
+  fetchedAt   DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  seasons CrSeason[]
+
+  @@map("cr_series")
+}
+
+/// One Crunchyroll season. Crunchyroll makes a separate season per audio language, so a dub of
+/// the same story is a second row here (KURO-REQ-012 folds them).
+model CrSeason {
+  id                   String   @id
+  seriesId             String   @map("series_id")
+  title                String
+  seasonNumber         Int      @map("season_number")
+  seasonSequenceNumber Float?   @map("season_sequence_number")
+  audioLocale          String?  @map("audio_locale")
+  raw                  Json
+  fetchedAt            DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  series   CrSeries    @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  episodes CrEpisode[]
+
+  @@index([seriesId])
+  @@map("cr_season")
+}
+
+model CrEpisode {
+  id             String    @id
+  seasonId       String    @map("season_id")
+  title          String
+  episodeNumber  Int?      @map("episode_number")
+  sequenceNumber Float     @map("sequence_number")
+  durationS      Int       @map("duration_s")
+  audioLocale    String?   @map("audio_locale")
+  airDate        DateTime? @map("air_date") @db.Timestamptz(6)
+  /// From static skip-events where Crunchyroll publishes them (KURO-REQ-011).
+  creditsStartS  Int?      @map("credits_start_s")
+  /// One Canonical Episode regardless of dub; set by resolve in KURO-T-1.4.
+  canonicalId    String?   @map("canonical_id")
+  raw            Json
+  fetchedAt      DateTime  @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  season CrSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([seasonId])
+  @@index([canonicalId])
+  @@map("cr_episode")
+}
+
+// ─── Change log (KURO-REQ-022) ───────────────────────────────────────────
+
+/// Every user mutation, with what it replaced, kept forever. Undo is a change-log operation: it
+/// restores `before` and writes its own row, pointing at the one it reversed.
+model ChangeLog {
+  id       String  @id @default(uuid(7)) @db.Uuid
+  userId   String? @map("user_id") @db.Uuid
+  entity   String
+  entityId String  @map("entity_id")
+  action   String
+  before   Json?
+  after    Json?
+  undoesId String? @unique @map("undoes_id") @db.Uuid
+  at       DateTime @default(now()) @db.Timestamptz(6)
+
+  user   User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  undoes ChangeLog? @relation("Undo", fields: [undoesId], references: [id], onDelete: Restrict)
+  undoneBy ChangeLog? @relation("Undo")
+
+  @@index([entity, entityId])
+  @@index([at])
+  @@map("change_log")
+}

@@ -2,22 +2,36 @@
   "name": "kuro-server",
   "private": true,
   "version": "0.0.0",
-  "description": "Kurō API, jobs and adapters; serves the web app as statics in production",
+  "description": "Kur\u014d API, jobs and adapters; serves the web app as statics in production",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --project unit"
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "express": "^5.2.1",
     "pino": "^10.3.1",
-    "zod": "^4.6.2"
+    "zod": "^4.6.2",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "prisma": "7.10.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "tsx": "^4.23.13"
-  }
+    "tsx": "^4.23.13",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.0"
+  },
+  "files": [
+    "dist",
+    "prisma",
+    "prisma.config.ts"
+  ]
 }
