@@ -2,7 +2,7 @@
   "name": "kuro-server",
   "private": true,
   "version": "0.0.0",
-  "description": "Kurō API, jobs and adapters; serves the web app as statics in production",
+  "description": "Kur\u014d API, jobs and adapters; serves the web app as statics in production",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -13,7 +13,8 @@
     "test:integration": "vitest run --project integration",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "kuro": "node --import tsx src/cli/main.ts"
   },
   "dependencies": {
     "@d3cloudio/auth-client": "^0.1.1",
