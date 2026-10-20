@@ -99,7 +99,8 @@ function Heatmap({ from, to, days }: StatsData['heatmap']) {
   }
   return (
     <figure className="flex min-w-0 flex-col gap-2">
-      <div className="min-w-0 overflow-x-auto pb-1">
+      {/* Focusable, so the heatmap scrolls from the keyboard on a narrow screen. */}
+      <div tabIndex={0} role="region" aria-label="Watch heatmap, scrollable" className="min-w-0 overflow-x-auto pb-1 focus-visible:outline-2 focus-visible:outline-kin">
         <div role="img" aria-label={`Watch heatmap, ${dayLabel(from)} to ${dayLabel(to)}: ${String(days.length)} days with plays`} className="grid w-max grid-flow-col grid-rows-7 gap-[2px]">
           {weeks.flat().map(({ day, future }) => {
             const d = byDay.get(day);

@@ -15,15 +15,15 @@ interface QueueItem {
 
 /** The rewatch queue (KURO-REQ-042): in the owner's order, each with why and where to start. */
 export function RewatchQueue() {
-  const [items, setItems] = useState<QueueItem[]>();
+  const [items, setItems] = useState<QueueItem[] | null>();
   const [version, setVersion] = useState(0);
   useEffect(() => {
-    void api<{ items: QueueItem[] }>('/api/rewatch-queue').then((r) => { setItems(r.items); }, () => { setItems([]); });
+    void api<{ items: QueueItem[] }>('/api/rewatch-queue').then((r) => { setItems(r.items); }, () => { setItems(null); });
   }, [version]);
   const reload = () => { setVersion((v) => v + 1); };
 
   const move = (i: number, by: -1 | 1) => {
-    if (items === undefined) return;
+    if (items === undefined || items === null) return;
     const keys = items.map((x) => x.showKey);
     const j = i + by;
     if (j < 0 || j >= keys.length) return;
@@ -37,6 +37,7 @@ export function RewatchQueue() {
     <section aria-labelledby="rewatch-queue" className="flex flex-col gap-2">
       <h2 id="rewatch-queue" className="text-[11px] font-medium tracking-[0.6px] text-faint uppercase">Rewatch queue</h2>
       {items === undefined && <div aria-busy="true" className="h-16 animate-pulse rounded-[10px] bg-raised" />}
+      {items === null && <p role="alert" className="text-[13px] text-muted">The rewatch queue could not load. Try again in a moment.</p>}
       {items?.length === 0 && <p className="text-[13px] text-muted">Nothing queued — add a show from its page.</p>}
       <ol className="flex flex-col gap-2">
         {items?.map((it, i) => (

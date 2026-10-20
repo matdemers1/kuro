@@ -43,7 +43,7 @@ export function UpNextCard({ item }: { item: UpNextItem }) {
         </div>
       </button>
       {item.watchUrl !== null && (
-        <a href={item.watchUrl} rel="noopener" className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-shu px-4 text-[15px] font-bold text-on-accent">
+        <a href={item.watchUrl} rel="noopener" className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-shu-fill px-4 text-[15px] font-bold text-on-accent">
           ▶ Watch
         </a>
       )}
@@ -53,9 +53,9 @@ export function UpNextCard({ item }: { item: UpNextItem }) {
 
 export function UpNext() {
   const [cr, setCr] = useState<CrStatus>();
-  const [items, setItems] = useState<UpNextItem[]>();
+  const [items, setItems] = useState<UpNextItem[] | null>();
   const loadItems = () => {
-    void api<{ items: UpNextItem[] }>('/api/up-next').then((r) => { setItems(r.items); }, () => { setItems([]); });
+    void api<{ items: UpNextItem[] }>('/api/up-next').then((r) => { setItems(r.items); }, () => { setItems(null); });
   };
   useEffect(() => {
     void api<CrStatus>('/api/crunchyroll').then(setCr, () => { setCr({ linked: false }); });
@@ -69,9 +69,15 @@ export function UpNext() {
     <Screen kicker="Tonight" title="Up Next">
       <SyncBanner health={health} />
       {cr !== undefined && !cr.linked && <CrunchyrollLink status={cr} onLinked={setCr} />}
-      {cr?.linked === true && (items?.length ?? 0) === 0 && <ImportProgress onDerived={loadItems} />}
+      {cr?.linked === true && items?.length === 0 && <ImportProgress onDerived={loadItems} />}
       {items === undefined && cr?.linked === true && <div aria-busy="true" className="h-32 animate-pulse rounded-[16px] bg-raised" />}
-      {items !== undefined && items.length === 0 && cr?.linked === true && (
+      {items === null && (
+        <div role="alert" className="flex flex-col items-start gap-2">
+          <p className="text-[15px] text-muted">Up Next could not load. Your history is safe; this is only the page.</p>
+          <button type="button" className="text-[13px] underline" onClick={loadItems}>Try again</button>
+        </div>
+      )}
+      {items !== undefined && items !== null && items.length === 0 && cr?.linked === true && (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
           <p className="font-display text-[40px] text-faint">空</p>
           <p className="text-[18px] font-bold">Nothing in progress</p>

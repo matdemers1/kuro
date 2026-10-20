@@ -12,9 +12,12 @@
   --color-border-strong: #3d3848;
   --color-text-primary: #f5efe3;
   --color-text-secondary: #a49c8e;
-  --color-text-faint: #6e675e;
+  --color-text-faint: #8f877b;
   --color-text-on-accent: #fffdf8;
-  --color-accent-shu: #e5483a;
+  /* Every text and fill pairing clears WCAG AA 4.5:1 on canvas, surface and raised (KURO-T-6.3). */
+  --color-accent-shu: #ef6355;
+  /* Red as a fill behind on-accent text: darker than shu-as-text, so the white label still reads. */
+  --color-accent-shu-fill: #c2352a;
   --color-accent-kin: #e8b75a;
   --color-status-ok: #7fb77e;
   --color-status-info: #7c93e0;
@@ -30,10 +33,11 @@
     --color-border-strong: #a49c8e;
     --color-text-primary: #17151d;
     --color-text-secondary: #5e574d;
-    --color-text-faint: #8e8679;
-    --color-accent-shu: #c8372a;
-    --color-accent-kin: #b9862a;
-    --color-status-ok: #4e8a4d;
+    --color-text-faint: #6b6357;
+    --color-accent-shu: #b3322a;
+    --color-accent-shu-fill: #b3322a;
+    --color-accent-kin: #7f5c16;
+    --color-status-ok: #376f37;
     --color-status-info: #3f5bb8;
     color-scheme: light;
   }
@@ -50,6 +54,7 @@
   --color-faint: var(--color-text-faint);
   --color-on-accent: var(--color-text-on-accent);
   --color-shu: var(--color-accent-shu);
+  --color-shu-fill: var(--color-accent-shu-fill);
   --color-kin: var(--color-accent-kin);
   --color-ok: var(--color-status-ok);
   --color-info: var(--color-status-info);
@@ -63,4 +68,15 @@ body {
   background: var(--color-bg-canvas);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
+}
+
+/* Reduced motion means no motion: no transitions, no pulsing skeletons. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
 }

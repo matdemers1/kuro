@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react
 export function Button({ kind = 'primary', className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { kind?: 'primary' | 'ghost' }) {
   const look =
     kind === 'primary'
-      ? 'bg-shu text-on-accent hover:brightness-110'
+      ? 'bg-shu-fill text-on-accent hover:brightness-110'
       : 'border border-line-strong text-ink hover:bg-raised';
   return (
     <button

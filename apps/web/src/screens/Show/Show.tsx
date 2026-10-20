@@ -185,7 +185,7 @@ export function Show({ showKey }: { showKey: string }) {
           </div>
         )}
         {show.next !== null && (
-          <a href={show.next.watchUrl} rel="noopener" className="inline-flex min-h-11 items-center justify-center rounded-full bg-shu px-5 text-[15px] font-bold text-on-accent">
+          <a href={show.next.watchUrl} rel="noopener" className="inline-flex min-h-11 items-center justify-center rounded-full bg-shu-fill px-5 text-[15px] font-bold text-on-accent">
             ▶ Watch {se(show.next.season, show.next.episode)}{show.next.audioLocale !== null ? ` (${audio(show.next.audioLocale)})` : ''}
           </a>
         )}

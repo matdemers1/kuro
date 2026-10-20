@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.56.0",
     "oidc-provider": "^9.5.0",
     "otpauth": "^9.5.2",
