@@ -334,6 +334,10 @@ model ShowState {
 model ShowPreference {
   showKey   String   @id @map("show_key")
   pinned    Boolean  @default(false)
+  /// The owner's own status — plan_to_watch or dropped, the two never derived (KURO-REQ-033).
+  status    String?
+  /// When it was set: a play after a drop means the owner came back to the Show.
+  statusAt  DateTime? @map("status_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("show_preference")

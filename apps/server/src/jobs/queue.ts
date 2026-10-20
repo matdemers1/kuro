@@ -145,6 +145,8 @@ export async function resumeInterrupted(deps: SyncDeps, queue: SyncQueue): Promi
     const last = await deps.db.syncRun.findFirst({ where: { crConnectionId: conn.id, status: 'succeeded' }, orderBy: { startedAt: 'desc' } });
     if (last !== null && last.derivedAt === null) await queue.request(conn.userId, 'derive');
     else if (last !== null && (await deps.db.mapping.count()) === 0 && (await deps.db.catalogEntry.count()) > 0) await queue.request(conn.userId, 'match');
+    // The first deploy of a new derived table (Shows, say): rebuild now rather than at 03:00.
+    else if (last !== null && (await deps.db.show.count()) === 0) await queue.request(conn.userId, 'match');
   }
 }
 
