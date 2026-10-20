@@ -23,6 +23,9 @@ let failOnce: number | null = null;
 let failKind: 'upstream' | 'expired' | 'blocked' = 'upstream';
 /** Serve page 1 whatever page is asked for — Crunchyroll ignoring the page parameter. */
 let ignorePage = false;
+/** Refuse pages past this number, the way Crunchyroll refuses page 11. */
+let capPage: number | null = null;
+let pagesSeen: number[] = [];
 let tokensSeen: string[] = [];
 
 let server: Server;
@@ -37,7 +40,12 @@ beforeAll(async () => {
     req.on('end', () => {
       const b = JSON.parse(body) as { page: number; pageSize: number; refreshToken: string };
       tokensSeen.push(b.refreshToken);
+      pagesSeen.push(b.page);
       res.setHeader('content-type', 'application/json');
+      if (capPage !== null && b.page > capPage) {
+        res.writeHead(502).end(JSON.stringify({ error: 'upstream', message: 'watch-history 400' }));
+        return;
+      }
       if (failOnce === b.page) {
         failOnce = null;
         res.writeHead(failKind === 'expired' ? 401 : failKind === 'blocked' ? 503 : 502).end(JSON.stringify({ error: failKind, message: 'synthetic failure' }));
@@ -64,6 +72,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   tokensSeen = [];
+  pagesSeen = [];
 });
 
 const playsFor = () => db.play.count({ where: { crParentId: 'GSER1' } });
@@ -111,6 +120,30 @@ describe('backfill (KURO-REQ-003, KURO-REQ-004)', () => {
     } finally {
       ignorePage = false;
     }
+  });
+
+  it('ends at the page cap as a success, with a note that older plays are out of reach', async () => {
+    capPage = 3;
+    try {
+      const out = await runSync(deps, userId, 'backfill');
+      expect(out.status).toBe('succeeded');
+      const run = await db.syncRun.findFirstOrThrow({ where: { kind: 'backfill', crConnection: { userId } }, orderBy: { startedAt: 'desc' } });
+      expect(run.lastPage).toBe(3);
+      expect(run.error).toMatch(/no history past page 3/);
+      expect((await db.crConnection.findUniqueOrThrow({ where: { userId } })).state).toBe('linked');
+    } finally {
+      capPage = null;
+    }
+  });
+
+  it('resumes a run checkpointed at another page size from the same offset', async () => {
+    const conn = await db.crConnection.findUniqueOrThrow({ where: { userId } });
+    // Four pages of one stored = offset 4, which is page 2 of 2.
+    const stale = await db.syncRun.create({ data: { crConnectionId: conn.id, kind: 'backfill', status: 'failed', pageSize: 1, lastPage: 4 } });
+    const out = await runSync(deps, userId, 'backfill');
+    expect(out).toMatchObject({ status: 'succeeded', runId: stale.id });
+    expect(pagesSeen[0]).toBe(3);
+    expect((await db.syncRun.findUniqueOrThrow({ where: { id: stale.id } })).pageSize).toBe(PAGE);
   });
 });
 

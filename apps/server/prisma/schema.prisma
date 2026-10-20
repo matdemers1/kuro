@@ -185,6 +185,8 @@ model SyncRun {
 
   /// Backfill checkpoint: the last history page fully stored, so a restart resumes after it.
   lastPage      Int     @default(0) @map("last_page")
+  /// The page size `last_page` counts in; the resume offset is their product.
+  pageSize      Int     @default(100) @map("page_size")
   pagesTotal    Int?    @map("pages_total")
   playsObserved Int     @default(0) @map("plays_observed")
   playsNew      Int     @default(0) @map("plays_new")

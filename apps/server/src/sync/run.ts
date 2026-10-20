@@ -15,7 +15,17 @@ import type { Logger } from '../logger.js';
  * Crunchyroll's `total` on a watch-history page counts that page's items, not the whole history, so
  * it never ends a run: a short or empty page does. A page identical to the one before it means the
  * page parameter was ignored, and stops the run rather than looping over it.
+ *
+ * Crunchyroll refuses page numbers past 10 with a 400, however small the pages, so a backfill asks
+ * for 1000 at a time (about 10,000 plays reachable) and reads that 400 as the end of what it will
+ * serve, not a failure. The checkpoint is an offset — `last_page × page_size` — so a run started at
+ * one page size resumes correctly at another.
  */
+
+/** Pages a backfill asks for: Crunchyroll caps the page number, not the page size. */
+export const BACKFILL_PAGE_SIZE = 1000;
+/** A nightly delta rarely needs more than one small page. */
+export const DELTA_PAGE_SIZE = 100;
 
 export type SyncKind = 'backfill' | 'delta';
 
@@ -26,6 +36,7 @@ export interface SyncDeps {
   readonly log: Logger;
   /** Pause between pages, to stay gentle with Crunchyroll (default 1.5 s). */
   readonly pauseMs?: number;
+  /** Overrides both page sizes (tests). */
   readonly pageSize?: number;
 }
 
@@ -52,12 +63,18 @@ export async function runSync(deps: SyncDeps, userId: string, kind: SyncKind): P
     kind === 'backfill'
       ? await deps.db.syncRun.findFirst({ where: { crConnectionId: conn.id, kind: 'backfill', status: { in: ['running', 'failed'] } }, orderBy: { startedAt: 'desc' } })
       : null;
-  const run =
-    unfinished !== null
-      ? await deps.db.syncRun.update({ where: { id: unfinished.id }, data: { status: 'running', error: null, finishedAt: null } })
-      : await deps.db.syncRun.create({ data: { crConnectionId: conn.id, kind } });
+  const wanted = deps.pageSize ?? (kind === 'backfill' ? BACKFILL_PAGE_SIZE : DELTA_PAGE_SIZE);
+  let run;
+  if (unfinished !== null) {
+    // Re-express the checkpoint in the wanted page size when it lands on a page boundary.
+    const offset = unfinished.lastPage * unfinished.pageSize;
+    const resize = offset % wanted === 0 ? { pageSize: wanted, lastPage: offset / wanted } : {};
+    run = await deps.db.syncRun.update({ where: { id: unfinished.id }, data: { status: 'running', error: null, finishedAt: null, ...resize } });
+  } else {
+    run = await deps.db.syncRun.create({ data: { crConnectionId: conn.id, kind, pageSize: wanted } });
+  }
 
-  const pageSize = deps.pageSize ?? 100;
+  const pageSize = run.pageSize;
   const pause = deps.pauseMs ?? 1500;
   const highWater = conn.highWaterMark;
   let newest: Date | null = highWater;
@@ -65,11 +82,23 @@ export async function runSync(deps: SyncDeps, userId: string, kind: SyncKind): P
   let observed = run.playsObserved;
   let added = run.playsNew;
   let previousFirst: string | null = null;
+  let note: string | null = null;
 
   try {
     for (;;) {
       const s = await connection.session(deps.db, deps.secretKey, userId);
-      const result = await deps.sidecar.historyPage({ refreshToken: s.refreshToken, deviceId: s.deviceId, accountId: s.accountId, page, pageSize });
+      let result;
+      try {
+        result = await deps.sidecar.historyPage({ refreshToken: s.refreshToken, deviceId: s.deviceId, accountId: s.accountId, page, pageSize });
+      } catch (err) {
+        // Past the page cap Crunchyroll answers 400: everything it will serve is already stored.
+        if (page > 1 && err instanceof CrSidecarError && err.kind === 'upstream' && /\b400\b/.test(err.message)) {
+          note = `Crunchyroll serves no history past page ${String(page - 1)} of ${String(pageSize)}; older plays are out of reach.`;
+          deps.log.warn({ runId: run.id, page, pageSize }, 'history page refused past the cap; ending the run');
+          break;
+        }
+        throw err;
+      }
       // Persist the rotated token before anything else: losing it means re-linking.
       await connection.rotate(deps.db, deps.secretKey, s.id, result.refreshToken);
       if (result.items.length === 0) break;
@@ -140,7 +169,7 @@ export async function runSync(deps: SyncDeps, userId: string, kind: SyncKind): P
   const { _max } = await deps.db.play.aggregate({ where: { syncRun: { crConnectionId: conn.id } }, _max: { datePlayed: true } });
   const mark = _max.datePlayed ?? newest;
   await deps.db.$transaction([
-    deps.db.syncRun.update({ where: { id: run.id }, data: { status: 'succeeded', finishedAt: new Date() } }),
+    deps.db.syncRun.update({ where: { id: run.id }, data: { status: 'succeeded', finishedAt: new Date(), error: note } }),
     deps.db.crConnection.update({ where: { id: conn.id }, data: { state: 'linked', stateReason: null, lastSuccessAt: new Date(), highWaterMark: mark } }),
   ]);
   deps.log.info({ runId: run.id, kind, pages: page, playsNew: added }, 'sync succeeded');
