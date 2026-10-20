@@ -47,7 +47,10 @@ export function healthPanelRoutes(db: Db): Router {
     void (async () => {
       const h = await syncHealth(db, req.auth?.userId ?? '');
       const subscriptions = await db.pushSubscription.count();
-      res.json({ ...h, lastSuccessAt: h.lastSuccessAt?.toISOString() ?? null, pushDevices: subscriptions });
+      // The newest nightly backup and its restore check (KURO-T-6.2).
+      const b = await db.backupRun.findFirst({ orderBy: { startedAt: 'desc' } });
+      const backup = b === null ? null : { at: b.startedAt.toISOString(), file: b.file, sizeBytes: b.sizeBytes === null ? null : Number(b.sizeBytes), check: b.check, detail: b.detail };
+      res.json({ ...h, lastSuccessAt: h.lastSuccessAt?.toISOString() ?? null, pushDevices: subscriptions, backup });
     })().catch(next);
   });
   return router;

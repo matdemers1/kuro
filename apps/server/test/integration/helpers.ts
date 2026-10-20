@@ -1,4 +1,8 @@
+import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
+import { dirname, join } from 'node:path';
+import { Client } from 'pg';
 import type { Server } from 'node:http';
 import { pino } from 'pino';
 import { createApp } from '../../src/app.js';
@@ -54,4 +58,39 @@ export function cookieFrom(res: Response, name: string): string | null {
 
 export function json(body: unknown): RequestInit {
   return { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
+}
+
+/**
+ * A database of its own, freshly migrated, for a test that needs one owner and nothing else in it —
+ * an import, a restore. Named `<name>` beside the shared test database; dropped by `drop()`.
+ */
+export async function freshDatabase(name: string): Promise<{ url: string; db: Db; drop(): Promise<void> }> {
+  if (!/^[a-z0-9_]+_test$/.test(name)) throw new Error(`fresh database names end in _test: ${name}`);
+  const url = new URL(process.env['DATABASE_URL'] ?? '');
+  url.pathname = `/${name}`;
+  const admin = async (sql: string) => {
+    const u = new URL(url);
+    u.pathname = '/postgres';
+    const c = new Client({ connectionString: u.toString() });
+    await c.connect();
+    try {
+      await c.query(sql);
+    } finally {
+      await c.end();
+    }
+  };
+  await admin(`drop database if exists "${name}" with (force)`);
+  await admin(`create database "${name}"`);
+  const cli = join(dirname(createRequire(import.meta.url).resolve('prisma/package.json')), 'build/index.js');
+  const out = spawnSync(process.execPath, [cli, 'migrate', 'deploy'], { cwd: join(import.meta.dirname, '../..'), env: { ...process.env, DATABASE_URL: url.toString() }, encoding: 'utf8' });
+  if (out.status !== 0) throw new Error(out.stderr + out.stdout);
+  const db = createDb(url.toString());
+  return {
+    url: url.toString(),
+    db,
+    async drop() {
+      await db.$disconnect();
+      await admin(`drop database if exists "${name}" with (force)`);
+    },
+  };
 }

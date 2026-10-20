@@ -81,6 +81,9 @@ jobs:
             --from-migrations prisma/migrations \
             --to-schema prisma/schema.prisma \
             --exit-code
+      # The backup tests dump and restore: the client tools must match the server's major version.
+      - name: pg_dump and pg_restore are PostgreSQL 16
+        run: pg_dump --version | grep -q ' 16\.' && pg_restore --version | grep -q ' 16\.'
       - run: pnpm --filter kuro-server test:integration
 
   # The exit demo is a property of the built thing: the server serving the built web app, driven in

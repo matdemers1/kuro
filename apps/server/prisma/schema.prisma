@@ -677,3 +677,19 @@ model FillerEpisode {
   @@id([slug, number])
   @@map("filler_episode")
 }
+
+/// One nightly backup (KURO-T-6.2): the dump, and whether restoring it into a scratch database gave
+/// the same Up Next as the live one. The health panel reads the newest.
+model BackupRun {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  file       String?
+  sizeBytes  BigInt?   @map("size_bytes")
+  /// ok, failed (the restore differed) or error (the dump or restore did not run).
+  check      String
+  detail     String?
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  @@index([startedAt])
+  @@map("backup_run")
+}

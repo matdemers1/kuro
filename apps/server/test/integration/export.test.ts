@@ -1,14 +1,10 @@
-import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setPassword } from '../../src/auth/login.js';
 import { seal } from '../../src/crypto/secretbox.js';
-import { createDb, type Db } from '../../src/db.js';
+import type { Db } from '../../src/db.js';
 import { rebuildShows } from '../../src/derive/rebuild.js';
 import { importJson, KuroExport, malStatus } from '../../src/export/export.js';
-import { cookieFrom, json, PEPPER, SECRET_KEY, startApp, type Harness } from './helpers.js';
+import { cookieFrom, freshDatabase, json, PEPPER, SECRET_KEY, startApp, type Harness } from './helpers.js';
 
 /**
  * KURO-T-6.1: the JSON export carries every play and the owner's choices, and `import-json` reads it
@@ -19,23 +15,7 @@ import { cookieFrom, json, PEPPER, SECRET_KEY, startApp, type Harness } from './
 let h: Harness;
 let cookie = '';
 let fresh: Db;
-const FRESH = (() => {
-  const u = new URL(process.env['DATABASE_URL'] ?? '');
-  u.pathname = '/kuro_export_test';
-  return u;
-})();
-
-async function admin(sql: string) {
-  const u = new URL(FRESH);
-  u.pathname = '/postgres';
-  const c = new Client({ connectionString: u.toString() });
-  await c.connect();
-  try {
-    await c.query(sql);
-  } finally {
-    await c.end();
-  }
-}
+let dropFresh: () => Promise<void>;
 
 beforeAll(async () => {
   h = await startApp();
@@ -55,17 +35,13 @@ beforeAll(async () => {
   await h.db.rating.create({ data: { target: 'show:cr:GEXPORT', score: 8 } });
   await h.db.showNote.create({ data: { showKey: 'cr:GEXPORT', text: 'note, with "quotes"' } });
 
-  await admin('drop database if exists kuro_export_test with (force)');
-  await admin('create database kuro_export_test');
-  const cli = join(dirname(createRequire(import.meta.url).resolve('prisma/package.json')), 'build/index.js');
-  const out = spawnSync(process.execPath, [cli, 'migrate', 'deploy'], { cwd: join(import.meta.dirname, '../..'), env: { ...process.env, DATABASE_URL: FRESH.toString() }, encoding: 'utf8' });
-  if (out.status !== 0) throw new Error(out.stderr + out.stdout);
-  fresh = createDb(FRESH.toString());
+  const f = await freshDatabase('kuro_export_test');
+  fresh = f.db;
+  dropFresh = () => f.drop();
 }, 60_000);
 
 afterAll(async () => {
-  await fresh.$disconnect();
-  await admin('drop database if exists kuro_export_test with (force)');
+  await dropFresh();
   await h.db.rating.deleteMany({ where: { target: 'show:cr:GEXPORT' } });
   await h.db.showNote.deleteMany({ where: { showKey: 'cr:GEXPORT' } });
   await h.close();
