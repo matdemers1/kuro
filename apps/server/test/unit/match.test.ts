@@ -30,6 +30,11 @@ describe('titles', () => {
     expect(core('Mushoku Tensei: Jobless Reincarnation (English Dub)')).toBe('mushoku tensei');
   });
 
+  it('never looks up a title that is only a season number, even when an entry lists it as a synonym', () => {
+    const gate = entry('Gate Part 2', 'TV', 12, 2016, { synonyms: ['Season 2'] });
+    expect(new TitleIndex([gate]).search(['Season 2'])).toEqual([]);
+  });
+
   it('finds an entry through a synonym, and ranks an exact hit first', () => {
     const ds = entry('Kimetsu no Yaiba', 'TV', 26, 2019, { synonyms: ['Demon Slayer: Kimetsu no Yaiba'] });
     const other = entry('Demon Slayer Fan Recap', 'SPECIAL', 1, 2020);

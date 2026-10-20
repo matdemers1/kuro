@@ -3,6 +3,7 @@ import { requireUser } from '../auth/middleware.js';
 import type { Db } from '../db.js';
 import { rebuildShows } from '../derive/rebuild.js';
 import { record } from '../domain/changelog.js';
+import { restoreSeason, snapshot, type Snapshot } from './mappings.js';
 
 /**
  * The change log and undo (KURO-REQ-022). Undo restores an entry's `before`, writes its own entry
@@ -17,7 +18,22 @@ const UNDOABLE: Record<string, (db: Db, entityId: string, before: Record<string,
     await db.showPreference.upsert({ where: { showKey }, create: { showKey, pinned }, update: { pinned } });
     return 'ok';
   },
+  /** A review-queue answer: the season's mappings go back to what they were, if nothing changed since. */
+  async mapping_season(db, seasonId, before, after) {
+    const now = await snapshot(db, seasonId);
+    // jsonb does not keep key order, so compare with keys sorted.
+    if (stable(now) !== stable(after)) return 'moved_on';
+    await restoreSeason(db, seasonId, before as unknown as Snapshot);
+    return 'ok';
+  },
 };
+
+/** JSON with object keys sorted, so two equal values always print the same. */
+export function stable(value: unknown): string {
+  return JSON.stringify(value, (_k, v: unknown) =>
+    v !== null && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : v,
+  );
+}
 
 export function changeRoutes(db: Db): Router {
   const router = Router();

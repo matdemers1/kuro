@@ -3,7 +3,7 @@ import { requireUser } from '../auth/middleware.js';
 import type { Db } from '../db.js';
 import { pickImage, type ImageCache } from '../images/cache.js';
 
-/** /img/series/:id/poster and /img/episode/:id/thumb — the only images the app shows. */
+/** /img/series/:id/poster, /img/episode/:id/thumb and /img/catalog/:id — the only images the app shows. */
 export function imageRoutes(db: Db, cache: ImageCache): Router {
   const router = Router();
   router.use(requireUser);
@@ -31,6 +31,8 @@ export function imageRoutes(db: Db, cache: ImageCache): Router {
     const e = await db.crEpisode.findUnique({ where: { id }, select: { raw: true } });
     return pickImage((e?.raw as { images?: unknown } | undefined)?.images, 'thumbnail', 320);
   }));
+
+  router.get('/catalog/:id', serve(async (id) => (await db.catalogEntry.findUnique({ where: { id }, select: { picture: true } }))?.picture ?? null));
 
   return router;
 }

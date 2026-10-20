@@ -3,12 +3,14 @@ import { Button, Screen } from '../components/ui.js';
 import { api } from '../lib/api.js';
 import { navigate } from '../lib/router.js';
 import { ImportProgress } from './ImportProgress.js';
+import { useReviewCount } from './Review/Review.js';
 import { CrunchyrollLink, type CrStatus } from './Settings/CrunchyrollLink.js';
 import { SyncHealth } from './Settings/SyncHealth.js';
 
 /** You: sync health, the Crunchyroll link, and signing out. Stats arrive in Phase 5. */
 export function You({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   const [cr, setCr] = useState<CrStatus>();
+  const toReview = useReviewCount();
   useEffect(() => {
     void api<CrStatus>('/api/crunchyroll').then(setCr, () => { setCr({ linked: false }); });
   }, []);
@@ -17,6 +19,7 @@ export function You({ name, onSignOut }: { name: string; onSignOut: () => void }
       {cr?.linked === true && <SyncHealth />}
       {cr?.linked === true && <ImportProgress />}
       {cr !== undefined && <CrunchyrollLink status={cr} onLinked={setCr} />}
+      {toReview !== undefined && toReview > 0 && <Button onClick={() => { navigate('/review'); }}>Match review · {toReview} to check</Button>}
       <Button kind="ghost" onClick={() => { navigate('/you/changes'); }}>Change log</Button>
       <p className="text-[13px] text-faint">Signed in as {name}.</p>
       <Button kind="ghost" onClick={onSignOut}>Sign out</Button>

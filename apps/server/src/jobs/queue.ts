@@ -133,8 +133,9 @@ export function inlineQueue(deps: SyncDeps): SyncQueue & { readonly done: Promis
 }
 
 /**
- * At boot: resume an interrupted backfill, and finish a derivation a restart cut short — so a deploy
- * mid-import strands neither the history nor Up Next.
+ * At boot: resume an interrupted backfill, finish a derivation a restart cut short, and match once
+ * when there is a catalog and history but nothing is mapped yet (the first deploy of the matcher) —
+ * so a deploy strands neither the history nor Up Next.
  */
 export async function resumeInterrupted(deps: SyncDeps, queue: SyncQueue): Promise<void> {
   const stuck = await deps.db.syncRun.findMany({ where: { status: 'running', kind: 'backfill' }, include: { crConnection: { select: { userId: true } } } });
@@ -143,6 +144,7 @@ export async function resumeInterrupted(deps: SyncDeps, queue: SyncQueue): Promi
     if (stuck.some((r) => r.crConnectionId === conn.id)) continue;
     const last = await deps.db.syncRun.findFirst({ where: { crConnectionId: conn.id, status: 'succeeded' }, orderBy: { startedAt: 'desc' } });
     if (last !== null && last.derivedAt === null) await queue.request(conn.userId, 'derive');
+    else if (last !== null && (await deps.db.mapping.count()) === 0 && (await deps.db.catalogEntry.count()) > 0) await queue.request(conn.userId, 'match');
   }
 }
 
