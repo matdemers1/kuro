@@ -1,6 +1,6 @@
 import PgBoss from 'pg-boss';
 import type { Logger } from '../logger.js';
-import { resolveCatalog } from '../cr/resolve.js';
+import { resolveCatalog, resolveMarkers } from '../cr/resolve.js';
 import { rebuildShows } from '../derive/rebuild.js';
 import type { Alerts } from '../push/sender.js';
 import { checkAlerts } from './alertsCheck.js';
@@ -14,7 +14,7 @@ import { runSync, type SyncDeps, type SyncKind } from '../sync/run.js';
  * overlap. Tests use the inline queue, which runs at once.
  */
 export interface SyncQueue {
-  request(userId: string, kind: SyncKind): Promise<void>;
+  request(userId: string, kind: SyncKind | 'derive'): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -27,7 +27,30 @@ export const NIGHTLY_CRON = '0 3 * * *';
 
 interface SyncJob {
   userId: string;
-  kind: SyncKind;
+  /** `derive` finishes what a sync started — matching and Up Next — without syncing again. */
+  kind: SyncKind | 'derive';
+}
+
+/**
+ * After a sync: what the new plays point at, then derived state, then credits markers and derived
+ * state again. Up Next is rebuilt before the marker pass because there is one marker per watched
+ * episode — thousands after a first import — and markers only refine what counts as watched.
+ */
+export async function afterSync(deps: SyncDeps, userId: string, runId: string, log: Logger): Promise<void> {
+  await resolveCatalog(deps, userId).catch((err: unknown) => {
+    log.warn({ err: err instanceof Error ? err.message : String(err) }, 'catalog resolve failed; it retries after the next sync');
+  });
+  let shows = await rebuildShows(deps.db, userId);
+  await deps.db.syncRun.update({ where: { id: runId }, data: { derivedAt: new Date() } });
+  log.info({ shows }, 'derived state rebuilt');
+  const { checked } = await resolveMarkers(deps, userId).catch((err: unknown) => {
+    log.warn({ err: err instanceof Error ? err.message : String(err) }, 'credits markers failed; they retry after the next sync');
+    return { checked: 0 };
+  });
+  if (checked > 0) {
+    shows = await rebuildShows(deps.db, userId);
+    log.info({ shows }, 'derived state rebuilt with credits markers');
+  }
 }
 
 export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts, catalog?: CatalogSource): Promise<SyncQueue> {
@@ -40,17 +63,15 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
   await boss.createQueue(QUEUE, { policy: 'singleton' });
   await boss.work<SyncJob>(QUEUE, { batchSize: 1 }, async ([job]) => {
     if (job === undefined) return;
-    const outcome = await runSync(deps, job.data.userId, job.data.kind);
-    log.info({ kind: job.data.kind, status: outcome.status }, 'sync job finished');
-    // What the new plays point at: series, seasons, episodes, dub folding and credits markers.
-    if (outcome.status === 'succeeded') {
-      await resolveCatalog(deps, job.data.userId).catch((err: unknown) => {
-        log.warn({ err: err instanceof Error ? err.message : String(err) }, 'catalog resolve failed; it retries after the next sync');
-      });
-      const shows = await rebuildShows(deps.db, job.data.userId);
-      await deps.db.syncRun.update({ where: { id: outcome.runId }, data: { derivedAt: new Date() } });
-      log.info({ shows }, 'derived state rebuilt');
+    const { userId, kind } = job.data;
+    if (kind === 'derive') {
+      const run = await deps.db.syncRun.findFirst({ where: { crConnection: { userId }, status: 'succeeded' }, orderBy: { startedAt: 'desc' } });
+      if (run !== null) await afterSync(deps, userId, run.id, log);
+      return;
     }
+    const outcome = await runSync(deps, userId, kind);
+    log.info({ kind, status: outcome.status }, 'sync job finished');
+    if (outcome.status === 'succeeded') await afterSync(deps, userId, outcome.runId, log);
   });
   // Nightly: a delta for every linked owner — or the backfill, if one has never finished.
   await boss.createQueue(NIGHTLY);
@@ -85,17 +106,25 @@ export function inlineQueue(deps: SyncDeps): SyncQueue & { readonly done: Promis
   return {
     done,
     request(userId, kind) {
-      done.push(runSync(deps, userId, kind));
+      if (kind !== 'derive') done.push(runSync(deps, userId, kind));
       return Promise.resolve();
     },
     stop: () => Promise.resolve(),
   };
 }
 
-/** Resume an interrupted backfill at boot, so a deploy mid-import does not strand it. */
+/**
+ * At boot: resume an interrupted backfill, and finish a derivation a restart cut short — so a deploy
+ * mid-import strands neither the history nor Up Next.
+ */
 export async function resumeInterrupted(deps: SyncDeps, queue: SyncQueue): Promise<void> {
   const stuck = await deps.db.syncRun.findMany({ where: { status: 'running', kind: 'backfill' }, include: { crConnection: { select: { userId: true } } } });
   for (const run of stuck) await queue.request(run.crConnection.userId, 'backfill');
+  for (const conn of await deps.db.crConnection.findMany({ select: { id: true, userId: true } })) {
+    if (stuck.some((r) => r.crConnectionId === conn.id)) continue;
+    const last = await deps.db.syncRun.findFirst({ where: { crConnectionId: conn.id, status: 'succeeded' }, orderBy: { startedAt: 'desc' } });
+    if (last !== null && last.derivedAt === null) await queue.request(conn.userId, 'derive');
+  }
 }
 
 /** What the nightly run queues: one run per linked connection that is not waiting on a re-link. */

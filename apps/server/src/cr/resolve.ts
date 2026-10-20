@@ -53,7 +53,12 @@ export function canonicalId(episode: { id: string; versions?: { guid: string; or
   return guids[0] ?? episode.id;
 }
 
-export async function resolveCatalog(deps: ResolveDeps, userId: string, now = new Date()): Promise<{ series: number; episodes: number; markers: number }> {
+/**
+ * Series, seasons and episodes for what the vault points at. Credits markers are a separate pass
+ * (`resolveMarkers`): there are as many as there are watched episodes, and Up Next should not wait
+ * on them.
+ */
+export async function resolveCatalog(deps: ResolveDeps, userId: string, now = new Date()): Promise<{ series: number; episodes: number }> {
   const pause = deps.pauseMs ?? 300;
   const wait = () => (pause > 0 ? new Promise((r) => setTimeout(r, pause)) : Promise.resolve());
 
@@ -114,20 +119,30 @@ export async function resolveCatalog(deps: ResolveDeps, userId: string, now = ne
     }
   }
 
-  // Credits markers for episodes with plays, asked for once (KURO-REQ-011).
+  deps.log.info({ series: due.length, episodes }, 'catalog resolved');
+  return { series: due.length, episodes };
+}
+
+/** Credits markers for episodes with plays, asked for once each (KURO-REQ-011). */
+export async function resolveMarkers(deps: ResolveDeps, userId: string, now = new Date()): Promise<{ checked: number; markers: number }> {
+  const pause = deps.pauseMs ?? 300;
+  const wait = () => (pause > 0 ? new Promise((r) => setTimeout(r, pause)) : Promise.resolve());
+  const mine = { syncRun: { crConnection: { userId } } };
   const played = await deps.db.play.findMany({ where: mine, distinct: ['crEpisodeId'], select: { crEpisodeId: true } });
   const needMarkers = await deps.db.crEpisode.findMany({ where: { id: { in: played.map((p) => p.crEpisodeId) }, skipCheckedAt: null }, select: { id: true } });
   let markers = 0;
+  let checked = 0;
   for (const { id } of needMarkers) {
     const events = await deps.sidecar.skipEvents(id).catch(() => undefined);
     if (events === undefined) continue; // a transient failure: try again next run
     const credits = Credits.safeParse(events?.['credits']);
     const start = credits.success ? Math.floor(credits.data.start) : null;
     await deps.db.crEpisode.update({ where: { id }, data: { creditsStartS: start, skipCheckedAt: now } });
+    checked++;
     if (start !== null) markers++;
     await wait();
   }
 
-  deps.log.info({ series: due.length, episodes, markers }, 'catalog resolved');
-  return { series: due.length, episodes, markers };
+  deps.log.info({ checked, markers }, 'credits markers resolved');
+  return { checked, markers };
 }

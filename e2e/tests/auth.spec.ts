@@ -19,6 +19,18 @@ async function signInAtIssuer(page: Page, subject: string) {
   if (await consent.isVisible({ timeout: 3000 }).catch(() => false)) await consent.click();
 }
 
+/**
+ * After "Sign in with D3 Auth": the issuer's login form if it holds no session, else straight back to
+ * Up Next. Wait for whichever renders — a fixed timeout guesses wrong on a cold CI start.
+ */
+async function completeIssuerSignIn(page: Page) {
+  const login = page.locator('input[name="login"]');
+  const upNext = page.getByRole('heading', { name: 'Up Next' });
+  await expect(login.or(upNext)).toBeVisible({ timeout: 15_000 });
+  if (await login.isVisible()) await signInAtIssuer(page, 'owner-sub');
+  await expect(upNext).toBeVisible();
+}
+
 /** Each test starts in a fresh browser context; sign out only if this one is signed in. */
 async function signOut(page: Page) {
   await page.goto('/you');
@@ -78,17 +90,17 @@ test('Sign in with D3 Auth signs the linked owner in, by (iss, sub)', async ({ p
   await signOut(page);
   await page.getByRole('button', { name: 'Sign in with D3 Auth' }).click();
   // The issuer may still hold its own session from setup; sign in there only if it asks.
-  if (await page.locator('input[name="login"]').isVisible({ timeout: 3000 }).catch(() => false)) await signInAtIssuer(page, 'owner-sub');
-  await expect(page.getByRole('heading', { name: 'Up Next' })).toBeVisible();
+  await completeIssuerSignIn(page);
 });
 
 test('offline, the installed app opens read-only from its cache (KURO-REQ-019)', async ({ page, context }) => {
   await page.goto('/');
-  if (await page.getByRole('form', { name: 'Sign in' }).isVisible({ timeout: 2000 }).catch(() => false)) {
+  const signIn = page.getByRole('form', { name: 'Sign in' });
+  await expect(signIn.or(page.getByRole('heading', { name: 'Up Next' }))).toBeVisible({ timeout: 15_000 });
+  if (await signIn.isVisible()) {
     await page.getByRole('button', { name: 'Sign in with D3 Auth' }).click();
-    if (await page.locator('input[name="login"]').isVisible({ timeout: 3000 }).catch(() => false)) await signInAtIssuer(page, 'owner-sub');
+    await completeIssuerSignIn(page);
   }
-  await expect(page.getByRole('heading', { name: 'Up Next' })).toBeVisible();
   // Wait for the service worker to control the page, then visit once more so reads are cached.
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });
   await page.reload();
