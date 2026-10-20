@@ -44,8 +44,9 @@ export async function matchCatalog(deps: MatchDeps, userId: string): Promise<Mat
   }
   const { index, byAnilist } = await loadCatalog(db);
   const watched = await db.play.findMany({ where: { syncRun: { crConnection: { userId } }, crParentType: 'series' }, distinct: ['crParentId'], select: { crParentId: true } });
+  const planned = await db.planEntry.findMany({ select: { crSeriesId: true }, distinct: ['crSeriesId'] });
   const series = await db.crSeries.findMany({
-    where: { id: { in: watched.map((w) => w.crParentId) } },
+    where: { id: { in: [...new Set([...watched.map((w) => w.crParentId), ...planned.map((p) => p.crSeriesId)])] } },
     include: { seasons: { include: { episodes: { select: { id: true, episodeNumber: true, sequenceNumber: true, durationS: true, airDate: true, canonicalId: true } } } } },
   });
 

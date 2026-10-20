@@ -63,7 +63,10 @@ export async function resolveCatalog(deps: ResolveDeps, userId: string, now = ne
   const wait = () => (pause > 0 ? new Promise((r) => setTimeout(r, pause)) : Promise.resolve());
 
   const mine = { syncRun: { crConnection: { userId } } };
-  const parents = await deps.db.play.groupBy({ by: ['crParentId'], where: { ...mine, crParentType: 'series', crParentId: { not: '' } }, _max: { datePlayed: true } });
+  const played = await deps.db.play.groupBy({ by: ['crParentId'], where: { ...mine, crParentType: 'series', crParentId: { not: '' } }, _max: { datePlayed: true } });
+  // Series on the watchlist or a Crunchylist are resolved too: they are Shows to watch (KURO-T-3.5).
+  const planned = (await deps.db.planEntry.findMany({ select: { crSeriesId: true }, distinct: ['crSeriesId'] })).filter((p) => !played.some((x) => x.crParentId === p.crSeriesId));
+  const parents = [...played, ...planned.map((p) => ({ crParentId: p.crSeriesId, _max: { datePlayed: null as Date | null } }))];
   const known = new Map((await deps.db.crSeries.findMany({ select: { id: true, fetchedAt: true } })).map((s) => [s.id, s.fetchedAt]));
   const due = parents.filter((p) => {
     const fetched = known.get(p.crParentId);
