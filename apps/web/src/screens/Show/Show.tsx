@@ -50,6 +50,7 @@ interface ShowDetail {
   items?: { entryId: string; kind: 'season' | 'extra'; required: boolean; title: string; type: string; episodes: number; year: number | null }[];
   extras?: Episode[];
   franchise?: { showKey: string; title: string }[];
+  franchiseKey?: string | null;
   seriesIds?: string[];
 }
 
@@ -259,6 +260,9 @@ export function Show({ showKey }: { showKey: string }) {
             <h2 id="extras" className="text-[11px] font-medium tracking-[0.6px] text-faint uppercase">Extras — optional, never needed for Completed</h2>
             <ol className="flex flex-col gap-1">{show.extras?.map((e) => <EpisodeRow key={e.crEpisodeId} e={e} />)}</ol>
           </section>
+        )}
+        {show.franchiseKey !== null && show.franchiseKey !== undefined && (show.items?.length ?? 0) > 1 && (
+          <button type="button" onClick={() => { navigate(`/franchise/${encodeURIComponent(show.franchiseKey ?? '')}`); }} className="self-start text-[13px] text-kin">Watch order →</button>
         )}
         {(show.franchise?.length ?? 0) > 0 && (
           <section aria-labelledby="franchise" className="flex flex-col gap-2">
