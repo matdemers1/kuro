@@ -284,6 +284,57 @@ model CrEpisode {
   @@map("cr_episode")
 }
 
+// ─── Derived state (KURO-ADR-004) — rebuilt whole, never edited ───────────
+
+enum ShowStatus {
+  plan_to_watch
+  watching
+  caught_up
+  paused
+  completed
+  dropped
+  rewatching
+}
+
+/// One row per Show, recomputed from the vault, the catalog and the owner's own choices. In Phase 1
+/// a Show is a Crunchyroll series (`show_key` = `cr:<series id>`); Phase 2 swaps in catalog Shows
+/// without changing this table's shape.
+model ShowState {
+  showKey         String     @id @map("show_key")
+  title           String
+  status          ShowStatus
+  watchedEpisodes Int        @map("watched_episodes")
+  totalEpisodes   Int        @map("total_episodes")
+  remainingS      Int        @map("remaining_s")
+  /// Last watched episode's season and number, for "S2 · E6" — the canonical episode's.
+  currentSeason   Int?       @map("current_season")
+  currentEpisode  Int?       @map("current_episode")
+  nextSeason      Int?       @map("next_season")
+  nextEpisode     Int?       @map("next_episode")
+  /// The Crunchyroll episode the Watch link opens: the next episode in the owner's audio language.
+  nextCrEpisodeId String?    @map("next_cr_episode_id")
+  nextAudioLocale String?    @map("next_audio_locale")
+  nextTitle       String?    @map("next_title")
+  /// The next episode became available after the owner last watched (a new dub episode, say).
+  nextIsNew       Boolean    @default(false) @map("next_is_new")
+  /// The next episode is in a later season than the last one watched.
+  nextIsNewSeason Boolean    @default(false) @map("next_is_new_season")
+  lastPlayedAt    DateTime?  @map("last_played_at") @db.Timestamptz(6)
+  derivedAt       DateTime   @map("derived_at") @db.Timestamptz(6)
+
+  @@index([status])
+  @@map("show_state")
+}
+
+/// The owner's own choices about a Show — inputs to derivation, never outputs (KURO-ADR-004).
+model ShowPreference {
+  showKey   String   @id @map("show_key")
+  pinned    Boolean  @default(false)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("show_preference")
+}
+
 // ─── Change log (KURO-REQ-022) ───────────────────────────────────────────
 
 /// Every user mutation, with what it replaced, kept forever. Undo is a change-log operation: it

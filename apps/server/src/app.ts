@@ -10,6 +10,7 @@ import { schemaRevision } from './boot.js';
 import { CrSidecar } from './adapters/crunchyroll.js';
 import { crunchyrollRoutes } from './routes/crunchyroll.js';
 import { syncRoutes } from './routes/sync.js';
+import { upNextRoutes } from './routes/upNext.js';
 import type { SyncQueue } from './jobs/queue.js';
 
 export interface AppDeps {
@@ -69,6 +70,7 @@ export function createApp(deps: AppDeps): Express {
     const queue = deps.core.queue;
     app.use('/api/crunchyroll', crunchyrollRoutes({ db, sidecar, secretKey: deps.core.secretKey, log, ...(queue !== undefined ? { queue } : {}) }));
     if (queue !== undefined) app.use('/api/sync', syncRoutes({ db, queue }));
+    app.use('/api/up-next', upNextRoutes(db));
   }
 
   if (deps.webDist !== undefined) {
