@@ -4,6 +4,7 @@
  * writes outputs — so every rule is golden-testable and two rebuilds are identical by construction.
  */
 
+import type { FillerKind } from '../adapters/fillerlist.js';
 import { deriveStatus, type ManualStatus, type ShowStatus } from './status.js';
 
 export { PAUSED_AFTER_MS } from './status.js';
@@ -31,6 +32,8 @@ export interface EpisodeIn {
   readonly seasonId?: string;
   /** Every audio language it is out in (its versions): what dub lag counts. */
   readonly locales?: readonly string[];
+  /** What the filler guide says it is (KURO-T-5.3), when a guide covers it. */
+  readonly filler?: FillerKind;
 }
 
 export interface PlayIn {
@@ -48,6 +51,8 @@ export interface DeriveOptions {
   readonly moreComing?: boolean;
   /** The owner's own status: Plan to watch or Dropped. */
   readonly manual?: { readonly status: ManualStatus; readonly at: Date } | null;
+  /** Leave filler out of the main line (KURO-T-5.3): not next, not counted, never blocking Completed. */
+  readonly skipFiller?: boolean;
 }
 
 export interface ShowOut {
@@ -95,7 +100,8 @@ function canonicalEpisodes(episodes: readonly EpisodeIn[]): Canonical[] {
   const out: Canonical[] = [];
   for (const [id, versions] of groups) {
     const sorted = [...versions].sort((a, b) => a.id.localeCompare(b.id));
-    const primary = sorted.find((v) => v.id === id) ?? sorted[0];
+    // Versions merged by catalog episode have no ID of their own: the earliest season's labels the episode.
+    const primary = sorted.find((v) => v.id === id) ?? [...sorted].sort((a, b) => a.seasonSequence - b.seasonSequence || a.seasonNumber - b.seasonNumber || a.id.localeCompare(b.id))[0];
     if (primary !== undefined) out.push({ id, primary, versions: sorted });
   }
   return out.sort(
@@ -107,6 +113,9 @@ function canonicalEpisodes(episodes: readonly EpisodeIn[]): Canonical[] {
       a.id.localeCompare(b.id),
   );
 }
+
+/** Pure filler, skippable; mixed canon and filler is not, since part of it is the story. */
+const isFiller = (c: Canonical) => c.primary.filler === 'filler';
 
 /** Matched episodes in rank order, ahead of any the catalog does not place. */
 function compareRank(a: readonly [number, number] | undefined, b: readonly [number, number] | undefined): number {
@@ -129,7 +138,7 @@ export function preferredLocale(plays: readonly PlayIn[], byId: ReadonlyMap<stri
 
 export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayIn[], now: Date, fallbackLocale: string | null = 'en-US', options: DeriveOptions = {}): ShowOut {
   const byId = new Map(episodes.map((e) => [e.id, e]));
-  const ordered = canonicalEpisodes(episodes);
+  const ordered = canonicalEpisodes(episodes).filter((c) => !(options.skipFiller === true && isFiller(c)));
   const indexOf = new Map(ordered.map((c, i) => [c.id, i]));
   const watched = new Set<string>();
   let lastPlayedAt: Date | null = null;
@@ -277,10 +286,12 @@ export interface EpisodeRow {
   /** Past the owner's position: the title must stay hidden until tapped (KURO-REQ-018). */
   readonly spoiler: boolean;
   readonly isNext: boolean;
+  /** The filler guide's word for it, when one covers it. */
+  readonly filler: FillerKind | null;
 }
 
 /** The Show's episode list in watch order, one row per canonical episode, in the owner's language. */
-export function episodeList(episodes: readonly EpisodeIn[], plays: readonly PlayIn[], fallbackLocale: string | null = 'en-US'): EpisodeRow[] {
+export function episodeList(episodes: readonly EpisodeIn[], plays: readonly PlayIn[], fallbackLocale: string | null = 'en-US', skipFiller = false): EpisodeRow[] {
   const byId = new Map(episodes.map((e) => [e.id, e]));
   const ordered = canonicalEpisodes(episodes);
   const watchedAt = new Map<string, Date>();
@@ -295,6 +306,8 @@ export function episodeList(episodes: readonly EpisodeIn[], plays: readonly Play
     if (watchedAt.has(c.id)) lastIndex = i;
   });
   const locale = preferredLocale(plays, byId, fallbackLocale);
+  // Skipping filler, next is the first episode after the last watched one that is not filler.
+  const nextIndex = ordered.findIndex((c, i) => i > lastIndex && !(skipFiller && isFiller(c)));
   return ordered.map((c, i) => {
     const v = c.versions.find((x) => x.audioLocale === locale) ?? c.primary;
     return {
@@ -307,8 +320,9 @@ export function episodeList(episodes: readonly EpisodeIn[], plays: readonly Play
       audioLocale: v.audioLocale,
       watched: watchedAt.has(c.id),
       lastWatchedAt: watchedAt.get(c.id) ?? null,
-      spoiler: i > lastIndex + 1,
-      isNext: i === lastIndex + 1,
+      spoiler: nextIndex >= 0 && i > nextIndex,
+      isNext: i === nextIndex,
+      filler: c.primary.filler ?? null,
     };
   });
 }

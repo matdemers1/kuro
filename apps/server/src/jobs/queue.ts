@@ -7,6 +7,8 @@ import { importLists } from '../cr/lists.js';
 import type { Alerts } from '../push/sender.js';
 import { checkAlerts } from './alertsCheck.js';
 import { registerCatalogImport } from './catalogImport.js';
+import { registerFillerRefresh } from './fillerRefresh.js';
+import type { FillerClient } from '../adapters/fillerlist.js';
 import type { CatalogSource } from '../catalog/source.js';
 import type { ScheduleClient } from '../adapters/animeschedule.js';
 import { refreshSchedule, SCHEDULE_CRON, weekKey } from '../schedule/refresh.js';
@@ -68,7 +70,7 @@ export async function afterSync(deps: SyncDeps, userId: string, runId: string, l
   }
 }
 
-export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts, catalog?: CatalogSource, schedule?: ScheduleClient): Promise<SyncQueue> {
+export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts, catalog?: CatalogSource, schedule?: ScheduleClient, filler?: FillerClient): Promise<SyncQueue> {
   const boss = new PgBoss({ connectionString: databaseUrl, schema: 'pgboss' });
   boss.on('error', (err: unknown) => {
     log.error({ err: err instanceof Error ? err.message : String(err) }, 'job queue error');
@@ -126,6 +128,11 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
     // A new catalog release can retire entries and add better ones: match again after each import.
     await registerCatalogImport(boss, deps.db, catalog, log, timezone, async () => {
       for (const { userId } of await deps.db.crConnection.findMany({ select: { userId: true } })) await boss.send(QUEUE, { userId, kind: 'match' } satisfies SyncJob, { singletonKey: userId });
+    });
+  }
+  if (filler !== undefined) {
+    await registerFillerRefresh(boss, deps.db, filler, log, timezone, async () => {
+      for (const { userId } of await deps.db.crConnection.findMany({ select: { userId: true } })) await boss.send(QUEUE, { userId, kind: 'derive' } satisfies SyncJob, { singletonKey: userId });
     });
   }
   return {

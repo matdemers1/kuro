@@ -20,6 +20,8 @@ interface Episode {
   spoiler: boolean;
   isNext: boolean;
   watchUrl: string;
+  /** The filler guide's word for it (KURO-T-5.3). */
+  filler?: 'canon' | 'mixed' | 'filler' | 'anime_canon' | null;
 }
 
 interface ShowDetail {
@@ -41,6 +43,8 @@ interface ShowDetail {
   remainingS: number;
   /** Episodes out in the original but not yet in the owner's dub. */
   dubLag?: number;
+  skipFiller?: boolean;
+  filler?: { count: number; mixed: number; source: { name: string; url: string } } | null;
   next: null | { season: number | null; episode: number | null; title: string | null; audioLocale: string | null; watchUrl: string };
   episodes: Episode[];
   items?: { entryId: string; kind: 'season' | 'extra'; required: boolean; title: string; type: string; episodes: number; year: number | null }[];
@@ -49,12 +53,16 @@ interface ShowDetail {
   seriesIds?: string[];
 }
 
-/** One episode row; past your position the title stays hidden until tapped (KURO-REQ-018). */
-function EpisodeRow({ e }: { e: Episode }) {
+const FILLER_LABEL: Record<string, string> = { filler: 'Filler', mixed: 'Mixed canon/filler', anime_canon: 'Anime canon' };
+
+/** One episode row; past your position the title stays hidden until tapped (KURO-REQ-018). Filler says so (KURO-T-5.3). */
+function EpisodeRow({ e, skipFiller = false }: { e: Episode; skipFiller?: boolean }) {
   const [revealed, setRevealed] = useState(false);
   const hidden = e.spoiler && !revealed;
+  const skipped = skipFiller && e.filler === 'filler' && !e.watched;
+  const mark = e.filler === undefined || e.filler === null ? undefined : FILLER_LABEL[e.filler];
   return (
-    <li className={`flex items-center gap-3 rounded-[10px] px-3 py-2 ${e.isNext ? 'border border-shu bg-raised' : ''}`}>
+    <li className={`flex items-center gap-3 rounded-[10px] px-3 py-2 ${e.isNext ? 'border border-shu bg-raised' : ''} ${skipped ? 'opacity-50' : ''}`}>
       <span className={`w-8 font-mono text-[12px] ${e.watched ? 'text-faint' : 'text-muted'}`}>E{e.episodeNumber ?? '–'}</span>
       <div className="h-9 w-16 shrink-0 overflow-hidden rounded-[6px] bg-raised">
         {/* A thumbnail spoils as much as a title: past your position it stays hidden too. */}
@@ -68,7 +76,10 @@ function EpisodeRow({ e }: { e: Episode }) {
         ) : (
           <a href={e.watchUrl} rel="noopener" className="block truncate text-[15px]">{e.title}</a>
         )}
-        <p className="text-[13px] text-faint">{e.watched && e.lastWatchedAt !== null ? `Watched ${new Date(e.lastWatchedAt).toLocaleDateString()}` : e.isNext ? 'Up next' : hidden ? 'Spoiler-safe' : ''}</p>
+        <p className="flex flex-wrap items-center gap-x-2 text-[13px] text-faint">
+          <span>{e.watched && e.lastWatchedAt !== null ? `Watched ${new Date(e.lastWatchedAt).toLocaleDateString()}` : e.isNext ? 'Up next' : skipped ? 'Skipped' : hidden ? 'Spoiler-safe' : ''}</span>
+          {mark !== undefined && <span className={`rounded-full border px-1.5 text-[11px] font-medium tracking-[0.4px] uppercase ${e.filler === 'filler' ? 'border-kin text-kin' : 'border-line-strong text-muted'}`}>{mark}</span>}
+        </p>
       </div>
       {e.watched && <span className="text-ok"><CheckIcon /></span>}
     </li>
@@ -155,6 +166,23 @@ export function Show({ showKey }: { showKey: string }) {
             Dub {show.dubLag} behind{show.status === 'caught_up' ? ' — waiting on the dub' : ''}
           </p>
         )}
+        {show.filler !== null && show.filler !== undefined && (show.filler.count > 0 || show.filler.mixed > 0) && (
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={show.skipFiller === true}
+              onClick={() => { void api(`/api/shows/${encodeURIComponent(show.showKey)}/skip-filler`, { method: 'PUT', body: { skip: show.skipFiller !== true } }).then(() => { setReload((n) => n + 1); }); }}
+              className="flex items-center gap-3 self-start rounded-full border border-line-strong px-3 py-1.5 text-[13px]"
+            >
+              <span aria-hidden="true" className={`flex h-5 w-9 items-center rounded-full p-0.5 ${show.skipFiller === true ? 'justify-end bg-kin' : 'justify-start bg-raised'}`}><span className="h-4 w-4 rounded-full bg-ink" /></span>
+              Skip filler · {show.filler.count} {show.filler.count === 1 ? 'episode' : 'episodes'}
+            </button>
+            <p className="text-[12px] text-faint">
+              {show.filler.mixed > 0 ? `${String(show.filler.mixed)} mixed episodes stay in. ` : ''}Filler guide from <a className="underline" href={show.filler.source.url} rel="noopener">{show.filler.source.name}</a>.
+            </p>
+          </div>
+        )}
         {show.next !== null && (
           <a href={show.next.watchUrl} rel="noopener" className="inline-flex min-h-11 items-center justify-center rounded-full bg-shu px-5 text-[15px] font-bold text-on-accent">
             ▶ Watch {se(show.next.season, show.next.episode)}{show.next.audioLocale !== null ? ` (${audio(show.next.audioLocale)})` : ''}
@@ -224,7 +252,7 @@ export function Show({ showKey }: { showKey: string }) {
           </div>
         )}
         <ol className="flex flex-col gap-1">
-          {show.episodes.filter((e) => season === undefined || tabOf(e) === season).map((e) => <EpisodeRow key={e.crEpisodeId} e={e} />)}
+          {show.episodes.filter((e) => season === undefined || tabOf(e) === season).map((e) => <EpisodeRow key={e.crEpisodeId} e={e} skipFiller={show.skipFiller === true} />)}
         </ol>
         {(show.extras?.length ?? 0) > 0 && (
           <section aria-labelledby="extras" className="flex flex-col gap-1">

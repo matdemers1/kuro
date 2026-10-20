@@ -10,6 +10,7 @@ import { createOidcClient } from './auth/oidc.js';
 import { loadConfig, requireSecrets } from './config.js';
 import { createDb } from './db.js';
 import { createLogger } from './logger.js';
+import { AnimeFillerList } from './adapters/fillerlist.js';
 
 const config = loadConfig();
 const log = createLogger(config.LOG_LEVEL);
@@ -27,7 +28,7 @@ const transport =
     : null;
 const alerts = new Alerts(db, transport, log);
 const schedule = config.ANIMESCHEDULE_TOKEN === undefined ? undefined : new AnimeSchedule(config.ANIMESCHEDULE_TOKEN);
-const queue = await startPgBossQueue(databaseUrl, syncDeps, log, config.SYNC_TIMEZONE, alerts, { repo: config.KURO_CATALOG_REPO }, schedule);
+const queue = await startPgBossQueue(databaseUrl, syncDeps, log, config.SYNC_TIMEZONE, alerts, { repo: config.KURO_CATALOG_REPO }, schedule, new AnimeFillerList());
 await resumeInterrupted(syncDeps, queue);
 
 createApp({

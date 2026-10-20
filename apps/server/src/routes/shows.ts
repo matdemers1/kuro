@@ -66,6 +66,7 @@ export function showRoutes(db: Db): Router {
       }
       // Seasons and Extras, in watch order, with the catalog's names for them (KURO-REQ-031).
       const entries = new Map((await db.catalogEntry.findMany({ where: { id: { in: inputs.show.items.map((i) => i.entryId) } }, select: { id: true, title: true, type: true, episodes: true, seasonYear: true, picture: true } })).map((e) => [e.id, e]));
+      const rows = episodeList(inputs.main, inputs.plays, undefined, pref?.skipFiller ?? false);
       const watchedExtras = new Set(episodeList(inputs.extras, inputs.plays).filter((e) => e.watched).map((e) => e.crEpisodeId));
       const franchise = await db.show.findMany({ where: { franchiseKey: (await db.show.findUnique({ where: { showKey: key } }))?.franchiseKey ?? '' }, select: { showKey: true, title: true } });
       res.json({
@@ -92,7 +93,10 @@ export function showRoutes(db: Db): Router {
         }),
         seriesIds: inputs.show.seriesIds,
         franchise: franchise.filter((f) => f.showKey !== key).map((f) => ({ showKey: f.showKey, title: f.title })),
-        episodes: episodeList(inputs.main, inputs.plays).map((e) => ({ ...e, lastWatchedAt: e.lastWatchedAt?.toISOString() ?? null, watchUrl: `https://www.crunchyroll.com/watch/${e.crEpisodeId}` })),
+        skipFiller: pref?.skipFiller ?? false,
+        // The filler guide (KURO-T-5.3), credited when one covers the Show.
+        filler: inputs.fillerSlugs.length === 0 ? null : { count: rows.filter((e) => e.filler === 'filler').length, mixed: rows.filter((e) => e.filler === 'mixed').length, source: { name: 'Anime Filler List', url: `https://www.animefillerlist.com/shows/${inputs.fillerSlugs[0] ?? ''}` } },
+        episodes: rows.map((e) => ({ ...e, lastWatchedAt: e.lastWatchedAt?.toISOString() ?? null, watchUrl: `https://www.crunchyroll.com/watch/${e.crEpisodeId}` })),
         extras: episodeList(inputs.extras, inputs.plays).map((e) => ({ ...e, spoiler: false, isNext: false, watched: watchedExtras.has(e.crEpisodeId), lastWatchedAt: e.lastWatchedAt?.toISOString() ?? null, watchUrl: `https://www.crunchyroll.com/watch/${e.crEpisodeId}` })),
       });
     })().catch(next);
@@ -140,6 +144,24 @@ export function showRoutes(db: Db): Router {
   };
   router.put('/:key/rating', rate((req) => `show:${param(req, 'key')}`));
   router.put('/:key/seasons/:entryId/rating', rate((req) => `season:${param(req, 'entryId')}`));
+
+  /** Skip filler (KURO-T-5.3): Up Next goes past the guide's filler episodes. Change-logged. */
+  router.put('/:key/skip-filler', (req, res, next) => {
+    const body = z.object({ skip: z.boolean() }).safeParse(req.body);
+    const key = req.params['key'];
+    if (!body.success || !(key.startsWith('cr:') || key.startsWith('show:'))) {
+      res.status(400).json({ error: 'skip must be true or false' });
+      return;
+    }
+    const userId = req.auth?.userId ?? '';
+    void (async () => {
+      const before = (await db.showPreference.findUnique({ where: { showKey: key } }))?.skipFiller ?? false;
+      await db.showPreference.upsert({ where: { showKey: key }, create: { showKey: key, skipFiller: body.data.skip }, update: { skipFiller: body.data.skip } });
+      await record(db, { userId, entity: 'skip_filler', entityId: key, action: body.data.skip ? 'skip' : 'include', before: { skip: before }, after: { skip: body.data.skip } });
+      await rebuildShows(db, userId);
+      res.status(204).end();
+    })().catch(next);
+  });
 
   /** A free-text note on the Show (KURO-REQ-044); an empty one removes it. Change-logged. */
   router.put('/:key/note', (req, res, next) => {

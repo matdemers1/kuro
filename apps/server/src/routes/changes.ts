@@ -25,6 +25,14 @@ const UNDOABLE: Record<string, (db: Db, entityId: string, before: Record<string,
     await restoreQueue(db, (before['rows'] ?? []) as Awaited<ReturnType<typeof queueSnapshot>>);
     return 'ok';
   },
+  /** Skip filler, back to what it was, if it was not changed since. */
+  async skip_filler(db, showKey, before, after) {
+    const now = (await db.showPreference.findUnique({ where: { showKey } }))?.skipFiller ?? false;
+    if (now !== (after['skip'] === true)) return 'moved_on';
+    const skipFiller = before['skip'] === true;
+    await db.showPreference.upsert({ where: { showKey }, create: { showKey, skipFiller }, update: { skipFiller } });
+    return 'ok';
+  },
   /** Not interested, taken back or put back, if it was not changed since. */
   async rec_dismissal(db, catalogEntryId, before, after) {
     const now = (await db.recDismissal.findUnique({ where: { catalogEntryId } })) !== null;
