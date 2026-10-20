@@ -192,6 +192,8 @@ model SyncRun {
 
   startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
   finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+  /// When the catalog was resolved and derived state rebuilt after this run: until then Up Next is stale.
+  derivedAt  DateTime? @map("derived_at") @db.Timestamptz(6)
 
   crConnection CrConnection @relation(fields: [crConnectionId], references: [id], onDelete: Cascade)
   plays        Play[]

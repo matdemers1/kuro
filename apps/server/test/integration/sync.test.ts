@@ -11,7 +11,8 @@ import { SECRET_KEY } from './helpers.js';
 /**
  * KURO-T-1.2: a paced, resumable backfill. The fake sidecar serves a synthetic history — 5 pages of
  * 2, newest first — and can be told to fail a page once, which is what a crash or a block mid-run
- * looks like from the vault's side.
+ * looks like from the vault's side. Like Crunchyroll, its `total` counts the page's own items, not
+ * the whole history.
  */
 
 const PAGE = 2;
@@ -20,6 +21,8 @@ const day = (n: number) => new Date(Date.UTC(2024, 0, 1 + n, 21)).toISOString();
 let history = Array.from({ length: PAGE * PAGES }, (_, i) => ({ id: `GSY${String(i).padStart(3, '0')}`, parent_id: 'GSER1', parent_type: 'series', date_played: day(100 - i), playhead: 1400, fully_watched: true }));
 let failOnce: number | null = null;
 let failKind: 'upstream' | 'expired' | 'blocked' = 'upstream';
+/** Serve page 1 whatever page is asked for — Crunchyroll ignoring the page parameter. */
+let ignorePage = false;
 let tokensSeen: string[] = [];
 
 let server: Server;
@@ -40,8 +43,9 @@ beforeAll(async () => {
         res.writeHead(failKind === 'expired' ? 401 : failKind === 'blocked' ? 503 : 502).end(JSON.stringify({ error: failKind, message: 'synthetic failure' }));
         return;
       }
-      const items = history.slice((b.page - 1) * b.pageSize, b.page * b.pageSize);
-      res.end(JSON.stringify({ refreshToken: `rt-after-page-${String(b.page)}`, total: history.length, items }));
+      const page = ignorePage ? 1 : b.page;
+      const items = history.slice((page - 1) * b.pageSize, page * b.pageSize);
+      res.end(JSON.stringify({ refreshToken: `rt-after-page-${String(b.page)}`, total: items.length, items }));
     });
   });
   await new Promise<void>((r) => server.listen(0, r));
@@ -95,6 +99,18 @@ describe('backfill (KURO-REQ-003, KURO-REQ-004)', () => {
   it('stores nothing twice when a page is fetched again', async () => {
     await runSync(deps, userId, 'backfill');
     expect(await playsFor()).toBe(PAGE * PAGES);
+  });
+
+  it('stops, rather than looping, when Crunchyroll ignores the page and repeats page 1', async () => {
+    ignorePage = true;
+    try {
+      const out = await runSync(deps, userId, 'backfill');
+      expect(out.status).toBe('succeeded');
+      expect(tokensSeen).toHaveLength(2);
+      expect(await playsFor()).toBe(PAGE * PAGES);
+    } finally {
+      ignorePage = false;
+    }
   });
 });
 

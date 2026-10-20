@@ -11,6 +11,10 @@ import type { Logger } from '../logger.js';
  * that dies — a crash, a block, a deploy — resumes after the last page it stored, and storing a page
  * twice is harmless because a Play is unique on (episode, date played). A delta stops at the first
  * page that holds nothing newer than the high-water mark.
+ *
+ * Crunchyroll's `total` on a watch-history page counts that page's items, not the whole history, so
+ * it never ends a run: a short or empty page does. A page identical to the one before it means the
+ * page parameter was ignored, and stops the run rather than looping over it.
  */
 
 export type SyncKind = 'backfill' | 'delta';
@@ -60,6 +64,7 @@ export async function runSync(deps: SyncDeps, userId: string, kind: SyncKind): P
   let page = run.lastPage + 1;
   let observed = run.playsObserved;
   let added = run.playsNew;
+  let previousFirst: string | null = null;
 
   try {
     for (;;) {
@@ -68,6 +73,12 @@ export async function runSync(deps: SyncDeps, userId: string, kind: SyncKind): P
       // Persist the rotated token before anything else: losing it means re-linking.
       await connection.rotate(deps.db, deps.secretKey, s.id, result.refreshToken);
       if (result.items.length === 0) break;
+      const first = pageKey(result.items[0]);
+      if (first !== null && first === previousFirst) {
+        deps.log.warn({ runId: run.id, page }, 'history page repeats the one before it; stopping');
+        break;
+      }
+      previousFirst = first;
 
       const plays = [];
       let pageOldest: Date | null = null;
@@ -98,14 +109,15 @@ export async function runSync(deps: SyncDeps, userId: string, kind: SyncKind): P
           lastPage: page,
           playsObserved: observed,
           playsNew: added,
-          ...(result.total !== null ? { pagesTotal: Math.ceil(result.total / pageSize) } : {}),
+          // Only a total larger than one page says anything about how many pages are left.
+          ...(result.total !== null && result.total > result.items.length ? { pagesTotal: Math.ceil(result.total / pageSize) } : {}),
         },
       });
       deps.log.debug({ runId: run.id, page, stored: count }, 'history page stored');
 
       // History comes newest first: once a page reaches back to the mark, a delta has caught up.
       if (kind === 'delta' && highWater !== null && pageOldest !== null && pageOldest <= highWater) break;
-      if (result.total !== null && page * pageSize >= result.total) break;
+      if (result.items.length < pageSize) break;
       page++;
       if (pause > 0) await new Promise((r) => setTimeout(r, pause));
     }
@@ -135,6 +147,11 @@ export async function runSync(deps: SyncDeps, userId: string, kind: SyncKind): P
   return { status: 'succeeded', runId: run.id, pages: page, playsNew: added };
 }
 
+function pageKey(raw: unknown): string | null {
+  const e = Entry.safeParse(raw);
+  return e.success ? `${e.data.id}@${e.data.date_played}` : null;
+}
+
 /** What the import screen and the sync health panel show. */
 export async function latestRun(db: Db, userId: string) {
   const conn = await db.crConnection.findUnique({ where: { userId } });
@@ -156,6 +173,8 @@ export async function latestRun(db: Db, userId: string) {
           error: run.error,
           startedAt: run.startedAt.toISOString(),
           finishedAt: run.finishedAt?.toISOString() ?? null,
+          // Set once the run's plays are matched and Up Next rebuilt — the import is done for the owner.
+          derivedAt: run.derivedAt?.toISOString() ?? null,
         },
       };
 }
