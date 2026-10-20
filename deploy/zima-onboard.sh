@@ -32,6 +32,9 @@ SETUP_TOKEN=$(hex 16)
 KURO_CR_URL=http://kuro-cr:8080
 BACKUP_DIR=/data/backups
 ENV
+# Web Push keys, generated inside the image (ZimaOS has no Node), appended without being printed.
+DOCKER_CONFIG=/DATA/.docker docker run --rm "ghcr.io/matdemers1/kuro-server:sha-$SHA" node dist/cli/main.js vapid-keys >> server.env
+printf 'VAPID_SUBJECT=mailto:owner@dormice.ai\n' >> server.env
 cp "$TUNNEL_ENV" tunnel.env
 chmod 600 postgres.env server.env tunnel.env
 

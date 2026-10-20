@@ -3,6 +3,7 @@ import { Button, Screen } from '../components/ui.js';
 import { api } from '../lib/api.js';
 import { ImportProgress } from './ImportProgress.js';
 import { CrunchyrollLink, type CrStatus } from './Settings/CrunchyrollLink.js';
+import { SyncHealth } from './Settings/SyncHealth.js';
 
 /** You: sync health, the Crunchyroll link, and signing out. Stats arrive in Phase 5. */
 export function You({ name, onSignOut }: { name: string; onSignOut: () => void }) {
@@ -12,6 +13,7 @@ export function You({ name, onSignOut }: { name: string; onSignOut: () => void }
   }, []);
   return (
     <Screen kicker="Settings" title="You">
+      {cr?.linked === true && <SyncHealth />}
       {cr?.linked === true && <ImportProgress />}
       {cr !== undefined && <CrunchyrollLink status={cr} onLinked={setCr} />}
       <p className="text-[13px] text-faint">Signed in as {name}.</p>
