@@ -54,6 +54,20 @@ export interface GroupedShow {
   readonly items: readonly ShowItem[];
 }
 
+/**
+ * The owner's corrections to grouping (KURO-T-2.6), anchored on Crunchyroll series and catalog
+ * entries — both stable across syncs and catalog imports — never on derived Show keys.
+ *   merge   these series are one Show;
+ *   split   these entries are a Show of their own;
+ *   reorder this Show's items run in this order;
+ *   attach  this entry is an Extra of the Show holding `afterEntryId`, right after it.
+ */
+export type OverrideIn =
+  | { readonly kind: 'merge'; readonly seriesIds: readonly string[] }
+  | { readonly kind: 'split'; readonly entryIds: readonly string[] }
+  | { readonly kind: 'reorder'; readonly entryIds: readonly string[] }
+  | { readonly kind: 'attach'; readonly entryId: string; readonly afterEntryId: string };
+
 export interface Grouping {
   readonly shows: readonly GroupedShow[];
   /** The Show each Crunchyroll series belongs to. */
@@ -84,7 +98,7 @@ class UnionFind<T> {
   }
 }
 
-export function groupShows(series: readonly SeriesIn[], ranges: readonly RangeIn[], entries: ReadonlyMap<string, EntryInfo>, relations: readonly Relation[]): Grouping {
+export function groupShows(series: readonly SeriesIn[], ranges: readonly RangeIn[], entries: ReadonlyMap<string, EntryInfo>, relations: readonly Relation[], overrides: readonly OverrideIn[] = []): Grouping {
   // Entry components along the main line, and across the franchise, keyed by AniList id.
   const line = new UnionFind<number>();
   const franchise = new UnionFind<number>();
@@ -124,14 +138,33 @@ export function groupShows(series: readonly SeriesIn[], ranges: readonly RangeIn
     if (host !== undefined) showUf.union(s.id, host);
   }
 
+  // The owner said these series are one Show.
+  const known = new Set(series.map((s) => s.id));
+  for (const o of overrides) {
+    if (o.kind !== 'merge') continue;
+    const ids = o.seriesIds.filter((id) => known.has(id));
+    for (const id of ids.slice(1)) showUf.union(id, ids[0] ?? id);
+  }
+
   const members = new Map<string, SeriesIn[]>();
   for (const s of series) {
     const root = showUf.find(s.id);
     members.set(root, [...(members.get(root) ?? []), s]);
   }
 
-  const kindOfEntry = new Map<string, 'season' | 'extra'>();
-  const built: (GroupedShow & { franchiseOf: string | null; first: EntryInfo | null })[] = [];
+  // Which series each entry came from, for the series a split-off or attached entry brings along.
+  const seriesOfEntry = new Map<string, Set<string>>();
+  for (const [sid, list] of mapped) for (const e of list) seriesOfEntry.set(e.id, new Set([...(seriesOfEntry.get(e.id) ?? []), sid]));
+
+  interface Draft {
+    seriesIds: Set<string>;
+    items: { entryId: string; kind: 'season' | 'extra'; required: boolean }[];
+    title: string;
+    fallbackKey: string;
+    /** It held items before overrides moved them all away: then it is gone, not an empty Show. */
+    hadItems: boolean;
+  }
+  const drafts: Draft[] = [];
   for (const group of members.values()) {
     const all = group.flatMap((s) => mapped.get(s.id) ?? []).filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i);
     const seasons = all.filter(isSeason).sort(watchOrder);
@@ -139,24 +172,73 @@ export function groupShows(series: readonly SeriesIn[], ranges: readonly RangeIn
     const first = seasons[0] ?? extras[0] ?? null;
 
     // Seasons in watch order; each extra after the last season it does not precede.
-    const items: ShowItem[] = [];
-    let pos = 0;
+    const items: Draft['items'] = [];
     const pending = [...extras];
     for (const season of seasons) {
       while (pending.length > 0 && pending[0] !== undefined && watchOrder(pending[0], season) < 0 && items.length > 0) {
         const extra = pending.shift();
-        if (extra !== undefined) items.push({ entryId: extra.id, kind: 'extra', position: pos++, required: false });
+        if (extra !== undefined) items.push({ entryId: extra.id, kind: 'extra', required: false });
       }
-      items.push({ entryId: season.id, kind: 'season', position: pos++, required: true });
+      items.push({ entryId: season.id, kind: 'season', required: true });
     }
-    for (const extra of pending) items.push({ entryId: extra.id, kind: 'extra', position: pos++, required: seasons.length === 0 });
-    for (const it of items) kindOfEntry.set(it.entryId, seasons.length === 0 ? 'season' : it.kind);
+    for (const extra of pending) items.push({ entryId: extra.id, kind: 'extra', required: seasons.length === 0 });
 
     // The Show is named for the Crunchyroll series holding its first season: Crunchyroll's English
     // title reads better than the catalog's romaji.
     const titled = first === null ? group[0] : (group.find((s) => (mapped.get(s.id) ?? []).some((e) => e.id === first.id)) ?? group[0]);
-    const key = first === null ? `cr:${group[0]?.id ?? ''}` : `show:${first.id}`;
-    built.push({ key, title: titled?.title ?? '', franchiseKey: '', seriesIds: group.map((s) => s.id).sort(), items, franchiseOf: first === null ? null : franchiseOf(first), first });
+    drafts.push({ seriesIds: new Set(group.map((s) => s.id)), items, title: titled?.title ?? '', fallbackKey: `cr:${group[0]?.id ?? ''}`, hadItems: items.length > 0 });
+  }
+
+  const holding = (entryId: string) => drafts.find((d) => d.items.some((i) => i.entryId === entryId));
+  const titleFor = (entryId: string) => {
+    const sid = [...(seriesOfEntry.get(entryId) ?? [])][0];
+    return series.find((s) => s.id === sid)?.title ?? entries.get(entryId)?.title ?? '';
+  };
+  for (const o of overrides) {
+    if (o.kind === 'split') {
+      const from = holding(o.entryIds[0] ?? '');
+      if (from === undefined) continue;
+      const moving = new Set(o.entryIds);
+      const taken = from.items.filter((i) => moving.has(i.entryId));
+      if (taken.length === 0 || taken.length === from.items.length) continue;
+      from.items = from.items.filter((i) => !moving.has(i.entryId));
+      const seasonsLeft = taken.some((i) => i.kind === 'season');
+      drafts.push({
+        seriesIds: new Set(taken.flatMap((i) => [...(seriesOfEntry.get(i.entryId) ?? [])])),
+        items: taken.map((i) => ({ ...i, required: seasonsLeft ? i.kind === 'season' : true })),
+        title: titleFor(taken.find((i) => i.kind === 'season')?.entryId ?? taken[0]?.entryId ?? ''),
+        fallbackKey: `cr:${taken[0]?.entryId ?? ''}`,
+        hadItems: true,
+      });
+    } else if (o.kind === 'attach') {
+      const target = holding(o.afterEntryId);
+      const source = holding(o.entryId);
+      if (target === undefined || source === undefined || o.entryId === o.afterEntryId) continue;
+      source.items = source.items.filter((i) => i.entryId !== o.entryId);
+      const at = target.items.findIndex((i) => i.entryId === o.afterEntryId);
+      target.items.splice(at + 1, 0, { entryId: o.entryId, kind: 'extra', required: false });
+      for (const sid of seriesOfEntry.get(o.entryId) ?? []) target.seriesIds.add(sid);
+    } else if (o.kind === 'reorder') {
+      const d = holding(o.entryIds[0] ?? '');
+      if (d === undefined) continue;
+      const rank = new Map(o.entryIds.map((id, i) => [id, i]));
+      d.items = [...d.items].sort((a, b) => (rank.get(a.entryId) ?? Infinity) - (rank.get(b.entryId) ?? Infinity));
+    }
+  }
+
+  const kindOfEntry = new Map<string, 'season' | 'extra'>();
+  const built: (GroupedShow & { franchiseOf: string | null; first: EntryInfo | null })[] = [];
+  for (const d of drafts) {
+    if (d.items.length === 0 && (d.hadItems || d.seriesIds.size === 0)) continue;
+    const resolved = d.items.flatMap((i) => entries.get(i.entryId) ?? []);
+    const hasSeasons = d.items.some((i) => i.kind === 'season');
+    // The key is the earliest Season by date — not the custom order — so a reorder never orphans a
+    // pin or a status kept under the key.
+    const keyEntry = [...resolved].filter((e) => !hasSeasons || d.items.find((i) => i.entryId === e.id)?.kind === 'season').sort(watchOrder)[0] ?? null;
+    const items: ShowItem[] = d.items.map((i, position) => ({ entryId: i.entryId, kind: hasSeasons ? i.kind : 'extra', position, required: hasSeasons ? i.required : true }));
+    for (const it of items) kindOfEntry.set(it.entryId, hasSeasons ? it.kind : 'season');
+    const key = keyEntry === null ? d.fallbackKey : `show:${keyEntry.id}`;
+    built.push({ key, title: d.title, franchiseKey: '', seriesIds: [...d.seriesIds].sort(), items, franchiseOf: keyEntry === null ? null : franchiseOf(keyEntry), first: keyEntry });
   }
 
   // A Franchise is named for its earliest Show.
@@ -173,7 +255,9 @@ export function groupShows(series: readonly SeriesIn[], ranges: readonly RangeIn
   }
   shows.sort((a, b) => a.key.localeCompare(b.key));
 
+  // A series split across two Shows belongs, for anything unmatched in it, to the Show that keeps
+  // most of its entries — the one it was in before the split.
   const showOfSeries = new Map<string, string>();
-  for (const s of shows) for (const id of s.seriesIds) showOfSeries.set(id, s.key);
+  for (const s of [...shows].sort((a, b) => a.items.length - b.items.length)) for (const id of s.seriesIds) showOfSeries.set(id, s.key);
   return { shows, showOfSeries, kindOfEntry };
 }

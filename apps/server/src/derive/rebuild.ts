@@ -1,4 +1,5 @@
 import { Media } from '../adapters/anilist.js';
+import { loadOverrides } from '../overrides/overrides.js';
 import type { Db } from '../db.js';
 import { seasonIndex } from '../match/ranges.js';
 import { groupShows, type EntryInfo, type GroupedShow, type Relation } from './grouping.js';
@@ -70,6 +71,7 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
     }),
     entries,
     relations,
+    await loadOverrides(db),
   );
 
   const seriesById = new Map(series.map((s) => [s.id, s]));
@@ -107,9 +109,15 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
           const n = e.episodeNumber;
           const range = n === null ? undefined : ranges.find((r) => n >= r.epFrom && n <= r.epTo);
           if (range !== undefined && range.catalogEntryId !== null && n !== null) {
-            const ranked = { ...base, rank: [position.get(range.catalogEntryId) ?? 999, n + range.offset] as const };
+            // An entry in another Show — split off, or attached elsewhere — is that Show's to count.
+            const at = position.get(range.catalogEntryId);
+            if (at === undefined) continue;
+            const ranked = { ...base, rank: [at, n + range.offset] as const };
             if (grouping.kindOfEntry.get(range.catalogEntryId) === 'extra') extras.push(ranked);
             else main.push(ranked);
+          } else if (grouping.showOfSeries.get(s.id) !== show.key) {
+            // A series in two Shows after a split: its unplaced episodes stay with the one it came from.
+            continue;
           } else if (ranges.some((r) => r.catalogEntryId !== null)) {
             // A matched season's episode outside every range — a recap, an episode 0: an extra.
             extras.push(base);

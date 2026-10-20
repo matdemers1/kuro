@@ -18,6 +18,14 @@ const UNDOABLE: Record<string, (db: Db, entityId: string, before: Record<string,
     await db.showPreference.upsert({ where: { showKey }, create: { showKey, pinned }, update: { pinned } });
     return 'ok';
   },
+  /** A grouping override, added or taken back: undo does the opposite, if nothing changed since. */
+  async override(db, id, before, after) {
+    const now = await db.override.findUnique({ where: { id } });
+    if ((now !== null) !== (after['exists'] === true)) return 'moved_on';
+    if (now !== null) await db.override.delete({ where: { id } });
+    else if (typeof before['kind'] === 'string') await db.override.create({ data: { id, kind: before['kind'], payload: (before['payload'] ?? {}) } });
+    return 'ok';
+  },
   /** The owner's status for a Show, back to what it was, if nothing changed it since. */
   async show_status(db, showKey, before, after) {
     const now = await db.showPreference.findUnique({ where: { showKey } });
