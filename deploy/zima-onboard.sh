@@ -7,7 +7,8 @@
 #
 # ZimaOS has no openssl: secrets come from /dev/urandom.
 set -eu
-TUNNEL_ENV=${1:?usage: zima-onboard.sh <tunnel.env> <sha>}
+TUNNEL_ENV=$(cd "$(dirname "${1:?usage: zima-onboard.sh <tunnel.env> <sha>}")" && pwd)/$(basename "$1")
+[ -f "$TUNNEL_ENV" ] || { echo "No tunnel.env at $TUNNEL_ENV." >&2; exit 2; }
 SHA=${2:?usage: zima-onboard.sh <tunnel.env> <sha>}
 DIR=/DATA/kuro
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -19,6 +20,7 @@ mkdir -p "$DIR" && chmod 700 "$DIR"
 cd "$DIR"
 [ -e server.env ] && { echo "server.env exists in $DIR; refusing to overwrite secrets." >&2; exit 1; }
 
+umask 077
 PG=$(hex 24)
 printf 'POSTGRES_USER=kuro\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=kuro\n' "$PG" > postgres.env
 cat > server.env <<ENV
