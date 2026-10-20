@@ -7,6 +7,8 @@ import { authRoutes } from './routes/auth.js';
 import { oidcRoutes } from './routes/oidc.js';
 import { setupRoutes } from './routes/setup.js';
 import { schemaRevision } from './boot.js';
+import { CrSidecar } from './adapters/crunchyroll.js';
+import { crunchyrollRoutes } from './routes/crunchyroll.js';
 
 export interface AppDeps {
   readonly version: string;
@@ -59,6 +61,8 @@ export function createApp(deps: AppDeps): Express {
     app.use('/auth', authRoutes({ ...deps.core, secure }));
     app.use('/auth/oidc', oidcRoutes({ db, baseUrl, secure, client: deps.core.oidc, log }));
     app.use('/api/setup', setupRoutes({ ...deps.core, setupToken: deps.core.setupToken, secure }));
+    const sidecar = new CrSidecar(deps.core.sidecarUrl ?? 'http://kuro-cr:8080');
+    app.use('/api/crunchyroll', crunchyrollRoutes({ db, sidecar, secretKey: deps.core.secretKey, log }));
   }
 
   if (deps.webDist !== undefined) {
