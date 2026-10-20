@@ -452,3 +452,33 @@ model AnilistMedia {
 
   @@map("anilist_media")
 }
+
+/// A Crunchyroll season's episode range → a catalog entry (KURO-ADR-003): catalog episode =
+/// Crunchyroll episode number + offset. The matcher writes `auto` rows; the owner's `confirmed` and
+/// `override` rows are never touched by automation.
+model Mapping {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  crSeasonId     String   @map("cr_season_id")
+  epFrom         Int      @map("ep_from")
+  epTo           Int      @map("ep_to")
+  catalogEntryId String?  @map("catalog_entry_id")
+  offset         Int
+  /// auto (the matcher), confirmed (the owner accepted it), override (the owner changed it).
+  source         String   @default("auto")
+  /// accepted, or review — waiting on the owner.
+  status         String
+  /// strong or weak, as the matcher judged it.
+  confidence     String
+  signals        String[]
+  /// For the review queue: catalog entry ids worth showing, best first.
+  candidates     String[]
+  /// What the matcher proposed, kept when the owner confirms or overrides — known-wrong is counted from it.
+  autoEntryId    String?  @map("auto_entry_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([crSeasonId, epFrom])
+  @@index([status])
+  @@index([catalogEntryId])
+  @@map("mapping")
+}

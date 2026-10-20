@@ -17,7 +17,8 @@
     "build": "pnpm -r --if-present build",
     "scan": "node scripts/scan-personal-data.mjs",
     "e2e": "pnpm --filter e2e test",
-    "kuro": "pnpm --filter kuro-server --silent kuro"
+    "kuro": "pnpm --filter kuro-server --silent kuro",
+    "matcher-eval": "pnpm --filter kuro-server --silent kuro matcher-eval"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
