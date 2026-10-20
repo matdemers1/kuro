@@ -32,6 +32,14 @@ export function imageRoutes(db: Db, cache: ImageCache): Router {
     return pickImage((e?.raw as { images?: unknown } | undefined)?.images, 'thumbnail', 320);
   }));
 
+  // A Show's poster is its first Crunchyroll series' (what the owner recognises from Crunchyroll).
+  router.get('/show/:id/poster', serve(async (key) => {
+    const show = await db.show.findUnique({ where: { showKey: key }, select: { seriesIds: true } });
+    const seriesId = key.startsWith('cr:') ? key.slice(3) : show?.seriesIds[0];
+    const s = seriesId === undefined ? null : await db.crSeries.findUnique({ where: { id: seriesId }, select: { raw: true } });
+    return pickImage((s?.raw as { images?: unknown } | undefined)?.images, 'poster_tall', 240);
+  }));
+
   router.get('/catalog/:id', serve(async (id) => (await db.catalogEntry.findUnique({ where: { id }, select: { picture: true } }))?.picture ?? null));
 
   return router;

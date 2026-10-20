@@ -4,9 +4,11 @@ import { Poster, posterFor } from '../../components/Poster.js';
 import { Button } from '../../components/ui.js';
 import { api } from '../../lib/api.js';
 import { audio, hours, se } from '../../lib/format.js';
+import { navigate } from '../../lib/router.js';
 
 interface Episode {
   crEpisodeId: string;
+  seasonId: string | null;
   seasonNumber: number;
   episodeNumber: number | null;
   title: string;
@@ -28,6 +30,9 @@ interface ShowDetail {
   remainingS: number;
   next: null | { season: number | null; episode: number | null; title: string | null; audioLocale: string | null; watchUrl: string };
   episodes: Episode[];
+  items?: { entryId: string; kind: 'season' | 'extra'; required: boolean; title: string; type: string; episodes: number; year: number | null }[];
+  extras?: Episode[];
+  franchise?: { showKey: string; title: string }[];
 }
 
 /** One episode row; past your position the title stays hidden until tapped (KURO-REQ-018). */
@@ -56,12 +61,18 @@ function EpisodeRow({ e }: { e: Episode }) {
   );
 }
 
+const tabOf = (e: Episode) => e.seasonId ?? `S${String(e.seasonNumber)}`;
+
 export function Show({ showKey }: { showKey: string }) {
   const [show, setShow] = useState<ShowDetail | null>();
-  const [season, setSeason] = useState<number>();
+  const [season, setSeason] = useState<string>();
   useEffect(() => {
     void api<ShowDetail>(`/api/shows/${encodeURIComponent(showKey)}`).then(
-      (s) => { setShow(s); setSeason(s.next?.season ?? s.episodes.at(-1)?.seasonNumber); },
+      (s) => {
+        setShow(s);
+        const next = s.episodes.find((e) => e.isNext) ?? s.episodes.at(-1);
+        setSeason(next === undefined ? undefined : tabOf(next));
+      },
       () => { setShow(null); },
     );
   }, [showKey]);
@@ -69,7 +80,10 @@ export function Show({ showKey }: { showKey: string }) {
   if (show === undefined) return <main aria-busy="true" className="min-h-dvh bg-canvas" />;
   if (show === null) return <main className="p-6 text-muted">That show isn’t in your history.</main>;
 
-  const seasons = [...new Set(show.episodes.map((e) => e.seasonNumber))];
+  // One tab per Crunchyroll season, in watch order. A Show made of several series can have two
+  // "Season 1"s (Attack on Titan and its Final Season), so tabs are keyed by season, not number.
+  const tabs = [...new Map(show.episodes.map((e) => [tabOf(e), e.seasonNumber])).entries()];
+  const labels = new Map(tabs.map(([key, n], i) => [key, tabs.filter(([, m]) => m === n).length > 1 ? `S${String(n)} · ${String(i + 1)}` : `S${String(n)}`]));
   const pct = show.totalEpisodes > 0 ? Math.round((show.watchedEpisodes / show.totalEpisodes) * 100) : 0;
   const togglePin = () => {
     void api(`/api/shows/${encodeURIComponent(showKey)}/pin`, { method: 'PUT', body: { pinned: !show.pinned } }).then(() => { setShow({ ...show, pinned: !show.pinned }); });
@@ -101,18 +115,48 @@ export function Show({ showKey }: { showKey: string }) {
             ▶ Watch {se(show.next.season, show.next.episode)}{show.next.audioLocale !== null ? ` (${audio(show.next.audioLocale)})` : ''}
           </a>
         )}
-        {seasons.length > 1 && (
+        {(show.items?.length ?? 0) > 0 && (
+          <section aria-labelledby="parts" className="flex flex-col gap-2">
+            <h2 id="parts" className="text-[11px] font-medium tracking-[0.6px] text-faint uppercase">Seasons &amp; extras</h2>
+            <ol className="flex flex-col gap-1">
+              {show.items?.map((it) => (
+                <li key={it.entryId} className="flex items-baseline gap-2 text-[15px]">
+                  <span className={`w-14 shrink-0 text-[11px] font-medium tracking-[0.6px] uppercase ${it.kind === 'extra' ? 'text-kin' : 'text-muted'}`}>{it.kind === 'extra' ? 'Extra' : 'Season'}</span>
+                  <span className="min-w-0 flex-1">{it.title}</span>
+                  <span className="shrink-0 font-mono text-[12px] text-faint">{[it.type === 'TV' ? null : it.type.toLowerCase(), it.episodes > 1 ? `${String(it.episodes)} eps` : null, it.year].filter((x) => x !== null).join(' · ')}{it.kind === 'extra' && !it.required ? ' · optional' : ''}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        {tabs.length > 1 && (
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="Seasons">
-            {seasons.map((s) => (
-              <Button key={s} kind={s === season ? 'primary' : 'ghost'} role="tab" aria-selected={s === season} className="min-h-9 px-4" onClick={() => { setSeason(s); }}>
-                S{s}
+            {tabs.map(([key]) => (
+              <Button key={key} kind={key === season ? 'primary' : 'ghost'} role="tab" aria-selected={key === season} className="min-h-9 px-4" onClick={() => { setSeason(key); }}>
+                {labels.get(key)}
               </Button>
             ))}
           </div>
         )}
         <ol className="flex flex-col gap-1">
-          {show.episodes.filter((e) => season === undefined || e.seasonNumber === season).map((e) => <EpisodeRow key={e.crEpisodeId} e={e} />)}
+          {show.episodes.filter((e) => season === undefined || tabOf(e) === season).map((e) => <EpisodeRow key={e.crEpisodeId} e={e} />)}
         </ol>
+        {(show.extras?.length ?? 0) > 0 && (
+          <section aria-labelledby="extras" className="flex flex-col gap-1">
+            <h2 id="extras" className="text-[11px] font-medium tracking-[0.6px] text-faint uppercase">Extras — optional, never needed for Completed</h2>
+            <ol className="flex flex-col gap-1">{show.extras?.map((e) => <EpisodeRow key={e.crEpisodeId} e={e} />)}</ol>
+          </section>
+        )}
+        {(show.franchise?.length ?? 0) > 0 && (
+          <section aria-labelledby="franchise" className="flex flex-col gap-2">
+            <h2 id="franchise" className="text-[11px] font-medium tracking-[0.6px] text-faint uppercase">Also in this franchise</h2>
+            <div className="flex flex-wrap gap-2">
+              {show.franchise?.map((f) => (
+                <button key={f.showKey} type="button" onClick={() => { navigate(`/show/${encodeURIComponent(f.showKey)}`); }} className="rounded-full border border-line-strong px-3 py-1 text-[13px] text-muted">{f.title}</button>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
