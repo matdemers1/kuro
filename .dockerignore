@@ -1,0 +1,6 @@
+**/node_modules
+**/dist
+crates/**/target
+fixtures/real
+.git
+.env

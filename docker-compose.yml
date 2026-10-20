@@ -1,4 +1,5 @@
-# Skeleton — KURO-T-0.7 fills this in. The sidecar publishes no port (KURO-REQ-056).
+# Local and CI stack. The Zima deploy (KURO-T-0.7) runs the published images through Shipyard.
+# The sidecar publishes no port (KURO-REQ-056): only kuro-server reaches it, over this network.
 services:
   postgres:
     image: postgres:16
@@ -7,14 +8,23 @@ services:
       POSTGRES_PASSWORD: kuro
       POSTGRES_DB: kuro
     volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U kuro -d kuro']
+      interval: 5s
+      retries: 20
   kuro-cr:
-    build: ./crates/kuro-cr
-    # no ports: internal only
+    build: { context: crates/kuro-cr }
+    image: ghcr.io/matdemers1/kuro-cr:local
   kuro-server:
-    build: .
-    env_file: .env
-    depends_on: [postgres, kuro-cr]
-    ports: ["8080:8080"]
+    build: { context: ., dockerfile: apps/server/Dockerfile }
+    image: ghcr.io/matdemers1/kuro-server:local
+    environment:
+      KURO_CR_URL: http://kuro-cr:8080
+      DATABASE_URL: postgresql://kuro:kuro@postgres:5432/kuro
+    depends_on:
+      postgres: { condition: service_healthy }
+      kuro-cr: { condition: service_healthy }
+    ports: ['3300:3300']
     volumes: [images:/data/images, backups:/data/backups]
 volumes:
   pgdata:
