@@ -16,6 +16,7 @@ import { overrideRoutes } from './routes/overrides.js';
 import { thisSeasonRoutes } from './routes/thisSeason.js';
 import { rewatchRoutes } from './routes/rewatch.js';
 import { discoverRoutes, tasteRoutes } from './routes/discover.js';
+import { statsRoutes } from './routes/stats.js';
 import { catalogRoutes, mappingRoutes } from './routes/mappings.js';
 import { showRoutes } from './routes/shows.js';
 import { healthPanelRoutes, pushRoutes } from './routes/push.js';
@@ -43,6 +44,8 @@ export interface AppDeps {
     readonly alerts?: Alerts;
     readonly vapidPublicKey?: string | undefined;
     readonly images?: ImageCache;
+    /** The owner's calendar for stats; America/New_York unless SYNC_TIMEZONE says otherwise. */
+    readonly timezone?: string;
   };
 }
 
@@ -95,6 +98,7 @@ export function createApp(deps: AppDeps): Express {
     app.use('/api/rewatch-queue', rewatchRoutes(db));
     app.use('/api/discover', discoverRoutes(db));
     app.use('/api/taste', tasteRoutes(db));
+    app.use('/api/stats', statsRoutes(db, deps.core.timezone ?? 'America/New_York'));
     const alerts = deps.core.alerts ?? new Alerts(db, null, log);
     app.use('/api/push', pushRoutes({ db, alerts, publicKey: deps.core.vapidPublicKey }));
     app.use('/api/health-panel', healthPanelRoutes(db));

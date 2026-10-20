@@ -33,7 +33,7 @@ await resumeInterrupted(syncDeps, queue);
 createApp({
   version,
   webDist: config.WEB_DIST,
-  core: { db, baseUrl: config.BASE_URL, secretKey, pepper, oidc, log, setupToken: config.SETUP_TOKEN, sidecarUrl: config.KURO_CR_URL, sidecar, queue, alerts, vapidPublicKey: config.VAPID_PUBLIC_KEY, images: new ImageCache(config.IMAGE_DIR) },
+  core: { db, baseUrl: config.BASE_URL, secretKey, pepper, oidc, log, setupToken: config.SETUP_TOKEN, sidecarUrl: config.KURO_CR_URL, sidecar, queue, alerts, vapidPublicKey: config.VAPID_PUBLIC_KEY, images: new ImageCache(config.IMAGE_DIR), timezone: config.SYNC_TIMEZONE },
 }).listen(config.PORT, () => {
   log.info({ port: config.PORT, version, oidc: oidc !== null }, 'kuro-server listening');
 });

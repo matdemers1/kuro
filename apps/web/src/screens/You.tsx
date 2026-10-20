@@ -8,7 +8,7 @@ import { RewatchQueue } from './RewatchQueue.js';
 import { CrunchyrollLink, type CrStatus } from './Settings/CrunchyrollLink.js';
 import { SyncHealth } from './Settings/SyncHealth.js';
 
-/** You: sync health, the Crunchyroll link, and signing out. Stats arrive in Phase 5. */
+/** You: sync health, the Crunchyroll link, stats, taste, the rewatch queue, and signing out. */
 export function You({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   const [cr, setCr] = useState<CrStatus>();
   const toReview = useReviewCount();
@@ -22,6 +22,7 @@ export function You({ name, onSignOut }: { name: string; onSignOut: () => void }
       {cr !== undefined && <CrunchyrollLink status={cr} onLinked={setCr} />}
       {toReview !== undefined && toReview > 0 && <Button onClick={() => { navigate('/review'); }}>Match review · {toReview} to check</Button>}
       {cr?.linked === true && <RewatchQueue />}
+      {cr?.linked === true && <Button kind="ghost" onClick={() => { navigate('/you/stats'); }}>Stats and year in review</Button>}
       {cr?.linked === true && <Button kind="ghost" onClick={() => { navigate('/you/taste'); }}>Your taste</Button>}
       <Button kind="ghost" onClick={() => { navigate('/you/changes'); }}>Change log</Button>
       <p className="text-[13px] text-faint">Signed in as {name}.</p>
