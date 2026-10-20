@@ -14,6 +14,8 @@ blockExoticSubdeps: true
 # esbuild installs the binary tsx and Vite run on.
 onlyBuiltDependencies:
   - esbuild
+  # argon2 builds or verifies its native binding; without it, hashing segfaults.
+  - argon2
   - '@prisma/engines'
 # Refused: prisma's own postinstall (the package script runs `prisma generate` itself).
 ignoredBuiltDependencies:
