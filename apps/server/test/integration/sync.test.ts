@@ -69,7 +69,7 @@ describe('backfill (KURO-REQ-003, KURO-REQ-004)', () => {
     failOnce = 3;
     const out = await runSync(deps, userId, 'backfill');
     expect(out.status).toBe('failed');
-    const run = await db.syncRun.findFirstOrThrow({ where: { kind: 'backfill' }, orderBy: { startedAt: 'desc' } });
+    const run = await db.syncRun.findFirstOrThrow({ where: { kind: 'backfill', crConnection: { userId } }, orderBy: { startedAt: 'desc' } });
     expect(run.lastPage).toBe(2);
     expect(await playsFor()).toBe(4);
   });
@@ -78,7 +78,7 @@ describe('backfill (KURO-REQ-003, KURO-REQ-004)', () => {
     const out = await runSync(deps, userId, 'backfill');
     expect(out.status).toBe('succeeded');
     expect(await playsFor()).toBe(PAGE * PAGES);
-    const runs = await db.syncRun.findMany({ where: { kind: 'backfill' } });
+    const runs = await db.syncRun.findMany({ where: { kind: 'backfill', crConnection: { userId } } });
     expect(runs).toHaveLength(1);
     expect(runs[0]?.lastPage).toBe(PAGES);
     // The first request of the resumed run asked for page 3, carrying the token page 2 returned.

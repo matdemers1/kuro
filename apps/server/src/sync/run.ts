@@ -125,7 +125,7 @@ export async function runSync(deps: SyncDeps, userId: string, kind: SyncKind): P
 
   // The mark is the newest play in the vault, not just this run's: a resumed backfill never saw the
   // pages before its checkpoint.
-  const { _max } = await deps.db.play.aggregate({ _max: { datePlayed: true } });
+  const { _max } = await deps.db.play.aggregate({ where: { syncRun: { crConnectionId: conn.id } }, _max: { datePlayed: true } });
   const mark = _max.datePlayed ?? newest;
   await deps.db.$transaction([
     deps.db.syncRun.update({ where: { id: run.id }, data: { status: 'succeeded', finishedAt: new Date() } }),
@@ -140,7 +140,7 @@ export async function latestRun(db: Db, userId: string) {
   const conn = await db.crConnection.findUnique({ where: { userId } });
   if (conn === null) return null;
   const run = await db.syncRun.findFirst({ where: { crConnectionId: conn.id }, orderBy: { startedAt: 'desc' } });
-  const plays = await db.play.count();
+  const plays = await db.play.count({ where: { syncRun: { crConnectionId: conn.id } } });
   return run === null
     ? { run: null, plays }
     : {

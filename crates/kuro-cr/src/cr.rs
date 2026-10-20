@@ -52,7 +52,25 @@ pub struct HistoryPage {
     pub items: Vec<Value>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CmsResult {
+    pub refresh_token: String,
+    pub body: Value,
+}
+
 pub trait Cr: Send + Sync + 'static {
+    /// A read-only catalog path, already checked against the allowlist.
+    fn cms(
+        &self,
+        refresh_token: String,
+        device_id: String,
+        path: String,
+    ) -> impl Future<Output = Result<CmsResult, CrError>> + Send;
+    /// Crunchyroll's public intro/credits markers for one episode; None when none are published.
+    fn skip_events(
+        &self,
+        episode_id: String,
+    ) -> impl Future<Output = Result<Option<Value>, CrError>> + Send;
     fn link_with_password(
         &self,
         email: String,
@@ -84,10 +102,83 @@ async fn refresh_token_of(cr: &Crunchyroll) -> Result<String, CrError> {
     }
 }
 
+async fn get_json(
+    cr: &Crunchyroll,
+    url: String,
+    query: &[(&str, String)],
+) -> Result<Value, CrError> {
+    let res = cr
+        .client()
+        .get(&url)
+        .bearer_auth(cr.access_token().await)
+        .query(query)
+        .send()
+        .await
+        .map_err(|e| CrError::Upstream(e.to_string()))?;
+    let status = res.status().as_u16();
+    let body = res
+        .text()
+        .await
+        .map_err(|e| CrError::Upstream(e.to_string()))?;
+    match status {
+        200 => {}
+        401 => return Err(CrError::Expired(format!("{status} from catalog"))),
+        403 => return Err(CrError::Blocked(format!("{status} from catalog"))),
+        404 => return Err(CrError::BadInput("not found".into())),
+        _ => return Err(CrError::Upstream(format!("{status} from catalog"))),
+    }
+    serde_json::from_str(&body).map_err(|_| {
+        if body.contains("cf-") || body.contains("Cloudflare") {
+            CrError::Blocked("a Cloudflare page instead of JSON".into())
+        } else {
+            CrError::Upstream("a body that is not JSON".into())
+        }
+    })
+}
+
 /// The real thing, on crunchyroll-rs.
 pub struct LiveCr;
 
 impl Cr for LiveCr {
+    async fn cms(
+        &self,
+        refresh_token: String,
+        device_id: String,
+        path: String,
+    ) -> Result<CmsResult, CrError> {
+        let cr = Crunchyroll::builder()
+            .login_with_refresh_token(refresh_token, device(device_id))
+            .await?;
+        let body = get_json(
+            &cr,
+            format!("https://www.crunchyroll.com/content/v2/cms/{path}"),
+            &[
+                ("locale", "en-US".to_string()),
+                ("ratings", "true".to_string()),
+            ],
+        )
+        .await?;
+        Ok(CmsResult {
+            refresh_token: refresh_token_of(&cr).await?,
+            body,
+        })
+    }
+
+    async fn skip_events(&self, episode_id: String) -> Result<Option<Value>, CrError> {
+        let url =
+            format!("https://static.crunchyroll.com/skip-events/production/{episode_id}.json");
+        let res = reqwest::Client::new()
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| CrError::Upstream(e.to_string()))?;
+        match res.status().as_u16() {
+            200 => Ok(res.json::<Value>().await.ok()),
+            403 | 404 => Ok(None),
+            s => Err(CrError::Upstream(format!("{s} from skip-events"))),
+        }
+    }
+
     async fn link_with_password(
         &self,
         email: String,

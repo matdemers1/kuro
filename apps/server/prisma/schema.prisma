@@ -270,6 +270,8 @@ model CrEpisode {
   airDate        DateTime? @map("air_date") @db.Timestamptz(6)
   /// From static skip-events where Crunchyroll publishes them (KURO-REQ-011).
   creditsStartS  Int?      @map("credits_start_s")
+  /// When skip-events were last asked for, found or not — so a missing file is not re-fetched.
+  skipCheckedAt  DateTime? @map("skip_checked_at") @db.Timestamptz(6)
   /// One Canonical Episode regardless of dub; set by resolve in KURO-T-1.4.
   canonicalId    String?   @map("canonical_id")
   raw            Json

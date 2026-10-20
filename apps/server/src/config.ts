@@ -23,6 +23,8 @@ const Env = z.object({
   BACKUP_DIR: z.string().default('/data/backups'),
   /** Take a dump before applying migrations to a database that already holds data. */
   BACKUP_BEFORE_MIGRATE: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  /** The owner's time zone: nightly sync and day boundaries (KURO-REQ-005). */
+  SYNC_TIMEZONE: z.string().default('America/New_York'),
   /** The sidecar, on the compose network only (KURO-REQ-056). */
   KURO_CR_URL: z.url().default('http://kuro-cr:8080'),
   D3AUTH_ISSUER: z.url().optional(),
