@@ -11,7 +11,7 @@ const TABS = [
 ] as const;
 
 function activeTab(path: string): string {
-  if (path.startsWith('/show/')) return '/library';
+  if (path.startsWith('/show/') || path.startsWith('/franchise/') || path === '/review') return '/library';
   if (path.startsWith('/you/')) return '/you';
   return TABS.find((t) => t.path === path)?.path ?? '/';
 }

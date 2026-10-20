@@ -11,6 +11,7 @@ import { CrSidecar } from './adapters/crunchyroll.js';
 import { crunchyrollRoutes } from './routes/crunchyroll.js';
 import { syncRoutes } from './routes/sync.js';
 import { upNextRoutes } from './routes/upNext.js';
+import { franchiseRoutes } from './routes/franchises.js';
 import { catalogRoutes, mappingRoutes } from './routes/mappings.js';
 import { showRoutes } from './routes/shows.js';
 import { healthPanelRoutes, pushRoutes } from './routes/push.js';
@@ -84,6 +85,7 @@ export function createApp(deps: AppDeps): Express {
     app.use('/api/shows', showRoutes(db));
     app.use('/api/mappings', mappingRoutes(db));
     app.use('/api/catalog', catalogRoutes(db));
+    app.use('/api/franchises', franchiseRoutes(db));
     const alerts = deps.core.alerts ?? new Alerts(db, null, log);
     app.use('/api/push', pushRoutes({ db, alerts, publicKey: deps.core.vapidPublicKey }));
     app.use('/api/health-panel', healthPanelRoutes(db));
