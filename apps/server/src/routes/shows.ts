@@ -3,12 +3,13 @@ import { z } from 'zod';
 import { requireUser } from '../auth/middleware.js';
 import type { Db } from '../db.js';
 import { record } from '../domain/changelog.js';
-import { episodeList, type EpisodeIn } from '../derive/show.js';
-import { rebuildShows } from '../derive/rebuild.js';
+import { episodeList } from '../derive/show.js';
+import { loadShows, rebuildShows } from '../derive/rebuild.js';
 
 /**
- * A Show's detail (KURO-REQ-015) with its episode list in watch order, and the owner's pin. In
- * Phase 1 a Show is a Crunchyroll series: `cr:<series id>`.
+ * A Show's detail (KURO-REQ-015): its Seasons and Extras, its episode list in watch order, the rest
+ * of its Franchise, and the owner's pin. A matched Show is `show:<first season's entry>`; one still
+ * on Crunchyroll's structure is `cr:<series id>`.
  */
 export function showRoutes(db: Db): Router {
   const router = Router();
@@ -24,37 +25,38 @@ export function showRoutes(db: Db): Router {
 
   router.get('/:key', (req, res, next) => {
     const key = req.params['key'];
-    const seriesId = key.startsWith('cr:') ? key.slice(3) : null;
-    if (seriesId === null) {
+    if (!key.startsWith('cr:') && !key.startsWith('show:')) {
       res.status(404).json({ error: 'no such show' });
       return;
     }
     const userId = req.auth?.userId ?? '';
     void (async () => {
-      const [state, pref, series, plays] = await Promise.all([
-        db.showState.findUnique({ where: { showKey: key } }),
-        db.showPreference.findUnique({ where: { showKey: key } }),
-        db.crSeries.findUnique({ where: { id: seriesId }, include: { seasons: { include: { episodes: true } } } }),
-        db.play.findMany({ where: { crParentId: seriesId, syncRun: { crConnection: { userId } } }, select: { crEpisodeId: true, datePlayed: true, playheadS: true, fullyWatched: true } }),
-      ]);
-      if (state === null || series === null) {
+      const [state, pref, [inputs]] = await Promise.all([db.showState.findUnique({ where: { showKey: key } }), db.showPreference.findUnique({ where: { showKey: key } }), loadShows(db, userId, key)]);
+      if (state === null || inputs === undefined) {
         res.status(404).json({ error: 'no such show' });
         return;
       }
-      const episodes: EpisodeIn[] = series.seasons.flatMap((season) =>
-        season.episodes.map((e) => ({ id: e.id, canonicalId: e.canonicalId ?? e.id, seasonNumber: season.seasonNumber, seasonSequence: season.seasonSequenceNumber ?? season.seasonNumber, sequenceNumber: e.sequenceNumber, episodeNumber: e.episodeNumber, title: e.title, durationS: e.durationS, audioLocale: e.audioLocale, airDate: e.airDate, creditsStartS: e.creditsStartS })),
-      );
+      // Seasons and Extras, in watch order, with the catalog's names for them (KURO-REQ-031).
+      const entries = new Map((await db.catalogEntry.findMany({ where: { id: { in: inputs.show.items.map((i) => i.entryId) } }, select: { id: true, title: true, type: true, episodes: true, seasonYear: true, picture: true } })).map((e) => [e.id, e]));
+      const watchedExtras = new Set(episodeList(inputs.extras, inputs.plays).filter((e) => e.watched).map((e) => e.crEpisodeId));
+      const franchise = await db.show.findMany({ where: { franchiseKey: (await db.show.findUnique({ where: { showKey: key } }))?.franchiseKey ?? '' }, select: { showKey: true, title: true } });
       res.json({
         showKey: key,
         title: state.title,
-        description: series.description,
+        description: inputs.description,
         status: state.status,
         pinned: pref?.pinned ?? false,
         watchedEpisodes: state.watchedEpisodes,
         totalEpisodes: state.totalEpisodes,
         remainingS: state.remainingS,
         next: state.nextCrEpisodeId === null ? null : { season: state.nextSeason, episode: state.nextEpisode, title: state.nextTitle, audioLocale: state.nextAudioLocale, watchUrl: `https://www.crunchyroll.com/watch/${state.nextCrEpisodeId}` },
-        episodes: episodeList(episodes, plays).map((e) => ({ ...e, lastWatchedAt: e.lastWatchedAt?.toISOString() ?? null, watchUrl: `https://www.crunchyroll.com/watch/${e.crEpisodeId}` })),
+        items: inputs.show.items.flatMap((i) => {
+          const e = entries.get(i.entryId);
+          return e === undefined ? [] : [{ entryId: i.entryId, kind: i.kind, required: i.required, title: e.title, type: e.type, episodes: e.episodes, year: e.seasonYear, hasPicture: e.picture !== null }];
+        }),
+        franchise: franchise.filter((f) => f.showKey !== key).map((f) => ({ showKey: f.showKey, title: f.title })),
+        episodes: episodeList(inputs.main, inputs.plays).map((e) => ({ ...e, lastWatchedAt: e.lastWatchedAt?.toISOString() ?? null, watchUrl: `https://www.crunchyroll.com/watch/${e.crEpisodeId}` })),
+        extras: episodeList(inputs.extras, inputs.plays).map((e) => ({ ...e, spoiler: false, isNext: false, watched: watchedExtras.has(e.crEpisodeId), lastWatchedAt: e.lastWatchedAt?.toISOString() ?? null, watchUrl: `https://www.crunchyroll.com/watch/${e.crEpisodeId}` })),
       });
     })().catch(next);
   });
@@ -63,7 +65,7 @@ export function showRoutes(db: Db): Router {
   router.put('/:key/pin', (req, res, next) => {
     const body = z.object({ pinned: z.boolean() }).safeParse(req.body);
     const key = req.params['key'];
-    if (!body.success || !key.startsWith('cr:')) {
+    if (!body.success || !(key.startsWith('cr:') || key.startsWith('show:'))) {
       res.status(400).json({ error: 'pinned must be true or false' });
       return;
     }

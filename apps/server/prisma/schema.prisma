@@ -482,3 +482,37 @@ model Mapping {
   @@index([catalogEntryId])
   @@map("mapping")
 }
+
+/// A Show (KURO-T-2.5): derived, rebuilt whole with show_state — never edited (KURO-ADR-004).
+/// `show:<first season's catalog entry>` when matched, `cr:<series>` while it is not.
+model Show {
+  showKey      String   @id @map("show_key")
+  title        String
+  /// `fr:<earliest show's key>`: the Shows AniList's relations tie together.
+  franchiseKey String   @map("franchise_key")
+  /// The Crunchyroll series it is made of — one, or several when Crunchyroll split it.
+  seriesIds    String[] @map("series_ids")
+  derivedAt    DateTime @map("derived_at") @db.Timestamptz(6)
+
+  items ShowItem[]
+
+  @@index([franchiseKey])
+  @@map("show")
+}
+
+/// A Season or an Extra of a Show, in watch order (KURO-REQ-031). Derived.
+model ShowItem {
+  showKey        String  @map("show_key")
+  position       Int
+  catalogEntryId String  @map("catalog_entry_id")
+  /// season or extra.
+  kind           String
+  /// Extras are optional: they never block Completed.
+  required       Boolean
+
+  show Show @relation(fields: [showKey], references: [showKey], onDelete: Cascade)
+
+  @@id([showKey, position])
+  @@index([catalogEntryId])
+  @@map("show_item")
+}

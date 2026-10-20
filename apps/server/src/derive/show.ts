@@ -19,6 +19,14 @@ export interface EpisodeIn {
   readonly audioLocale: string | null;
   readonly airDate: Date | null;
   readonly creditsStartS: number | null;
+  /**
+   * Where a matched episode falls in its Show (KURO-T-2.5): its Season's position, then its catalog
+   * episode number. When set it orders the Show instead of Crunchyroll's season numbers, so a show
+   * Crunchyroll split across series, or numbered oddly, still runs in watch order.
+   */
+  readonly rank?: readonly [number, number];
+  /** The Crunchyroll season it is in; with rank, what "a new season" means. */
+  readonly seasonId?: string;
 }
 
 export interface PlayIn {
@@ -76,12 +84,26 @@ function canonicalEpisodes(episodes: readonly EpisodeIn[]): Canonical[] {
   }
   return out.sort(
     (a, b) =>
+      compareRank(a.primary.rank, b.primary.rank) ||
       a.primary.seasonSequence - b.primary.seasonSequence ||
       a.primary.seasonNumber - b.primary.seasonNumber ||
       a.primary.sequenceNumber - b.primary.sequenceNumber ||
       a.id.localeCompare(b.id),
   );
 }
+
+/** Matched episodes in rank order, ahead of any the catalog does not place. */
+function compareRank(a: readonly [number, number] | undefined, b: readonly [number, number] | undefined): number {
+  if (a === undefined && b === undefined) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  return a[0] - b[0] || a[1] - b[1];
+}
+
+// Labels stay Crunchyroll's — "S1 · E13" is how the owner finds an episode there — while matching
+// decides the order.
+const seasonOf = (e: EpisodeIn | undefined) => e?.seasonNumber ?? null;
+const episodeOf = (e: EpisodeIn | undefined) => e?.episodeNumber ?? null;
 
 /** The owner's audio language for a Show: whatever they watched it in most recently. */
 export function preferredLocale(plays: readonly PlayIn[], byId: ReadonlyMap<string, EpisodeIn>, fallback: string | null): string | null {
@@ -114,7 +136,11 @@ export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayI
 
   const available = nextVersion?.airDate ?? null;
   const nextIsNew = nextVersion !== undefined && lastPlayedAt !== null && available !== null && available > lastPlayedAt;
-  const nextIsNewSeason = next !== undefined && current !== undefined && next.primary.seasonNumber > current.primary.seasonNumber;
+  // A new season: the next episode is in a later Crunchyroll season — not the second cour of the
+  // same one (SPY x FAMILY's Part 2 is still Crunchyroll's Season 1).
+  const matched = next?.primary.rank !== undefined && current?.primary.rank !== undefined && next.primary.seasonId !== undefined;
+  const nextIsNewSeason =
+    next !== undefined && current !== undefined && (matched ? next.primary.seasonId !== current.primary.seasonId && compareRank(next.primary.rank, current.primary.rank) > 0 : next.primary.seasonNumber > current.primary.seasonNumber);
 
   let status: Status;
   if (next === undefined) status = ordered.length > 0 && watched.size > 0 ? 'completed' : 'watching';
@@ -126,10 +152,10 @@ export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayI
     watchedEpisodes: ordered.filter((c) => watched.has(c.id)).length,
     totalEpisodes: ordered.length,
     remainingS,
-    currentSeason: current?.primary.seasonNumber ?? null,
-    currentEpisode: current?.primary.episodeNumber ?? null,
-    nextSeason: next?.primary.seasonNumber ?? null,
-    nextEpisode: next?.primary.episodeNumber ?? null,
+    currentSeason: seasonOf(current?.primary),
+    currentEpisode: episodeOf(current?.primary),
+    nextSeason: seasonOf(next?.primary),
+    nextEpisode: episodeOf(next?.primary),
     nextCrEpisodeId: nextVersion?.id ?? null,
     nextAudioLocale: nextVersion?.audioLocale ?? null,
     nextTitle: nextVersion?.title ?? null,
@@ -177,6 +203,7 @@ export function upNext(rows: readonly UpNextRow[]): { showKey: string; group: Up
 
 export interface EpisodeRow {
   readonly crEpisodeId: string;
+  readonly seasonId: string | null;
   readonly seasonNumber: number;
   readonly episodeNumber: number | null;
   readonly title: string;
@@ -209,8 +236,9 @@ export function episodeList(episodes: readonly EpisodeIn[], plays: readonly Play
     const v = c.versions.find((x) => x.audioLocale === locale) ?? c.primary;
     return {
       crEpisodeId: v.id,
-      seasonNumber: c.primary.seasonNumber,
-      episodeNumber: c.primary.episodeNumber,
+      seasonId: c.primary.seasonId ?? null,
+      seasonNumber: seasonOf(c.primary) ?? c.primary.seasonNumber,
+      episodeNumber: episodeOf(c.primary),
       title: v.title,
       durationS: v.durationS,
       audioLocale: v.audioLocale,

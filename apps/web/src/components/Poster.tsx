@@ -20,6 +20,7 @@ export function Poster({ title, src, className = '' }: { title: string; src?: st
   );
 }
 
+/** A Show's poster: its Crunchyroll series' key art, whether it is matched (`show:`) or not (`cr:`). */
 export function posterFor(showKey: string): string | undefined {
-  return showKey.startsWith('cr:') ? `/img/series/${encodeURIComponent(showKey.slice(3))}/poster` : undefined;
+  return showKey.startsWith('cr:') || showKey.startsWith('show:') ? `/img/show/${encodeURIComponent(showKey)}/poster` : undefined;
 }
