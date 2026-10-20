@@ -6,6 +6,7 @@ import { CrSidecar } from '../../src/adapters/crunchyroll.js';
 import { canonicalId, resolveCatalog, type ResolveDeps } from '../../src/cr/resolve.js';
 import { seal } from '../../src/crypto/secretbox.js';
 import { createDb, type Db } from '../../src/db.js';
+import { rebuildShows } from '../../src/derive/rebuild.js';
 import { SECRET_KEY } from './helpers.js';
 
 /** A synthetic series: S1 in Japanese (original) and its English dub as a second CR season. */
@@ -95,5 +96,17 @@ describe('resolving the catalog (KURO-REQ-011, KURO-REQ-012)', () => {
     const before = cmsCalls.length;
     expect((await resolveCatalog(deps, userId)).series).toBe(0);
     expect(cmsCalls.length).toBe(before);
+  });
+
+  it('derives the Show, and two rebuilds produce identical rows (KURO-REQ-017)', async () => {
+    const now = new Date('2026-10-20T03:00:00Z');
+    await rebuildShows(db, userId, now);
+    const first = await db.showState.findMany({ orderBy: { showKey: 'asc' } });
+    await rebuildShows(db, userId, now);
+    const second = await db.showState.findMany({ orderBy: { showKey: 'asc' } });
+    expect(second).toEqual(first);
+    const s = first.find((r) => r.showKey === 'cr:GRSER');
+    // E1 watched (sub then dub), E2 watched in the dub: the show is complete, all in one Show.
+    expect(s).toMatchObject({ title: 'Synthetic Show', watchedEpisodes: 2, totalEpisodes: 2, status: 'completed' });
   });
 });

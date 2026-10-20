@@ -21,8 +21,10 @@ async function signInAtIssuer(page: Page, subject: string) {
 
 /** Each test starts in a fresh browser context; sign out only if this one is signed in. */
 async function signOut(page: Page) {
+  await page.goto('/you');
   const button = page.getByRole('button', { name: 'Sign out' });
-  if (await button.isVisible({ timeout: 2000 }).catch(() => false)) await button.click();
+  if (await button.isVisible({ timeout: 3000 }).catch(() => false)) await button.click();
+  await page.goto('/');
   await expect(page.getByRole('form', { name: 'Sign in' })).toBeVisible();
 }
 

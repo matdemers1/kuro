@@ -10,6 +10,8 @@ import { schemaRevision } from './boot.js';
 import { CrSidecar } from './adapters/crunchyroll.js';
 import { crunchyrollRoutes } from './routes/crunchyroll.js';
 import { syncRoutes } from './routes/sync.js';
+import { upNextRoutes } from './routes/upNext.js';
+import { showRoutes } from './routes/shows.js';
 import type { SyncQueue } from './jobs/queue.js';
 
 export interface AppDeps {
@@ -69,10 +71,22 @@ export function createApp(deps: AppDeps): Express {
     const queue = deps.core.queue;
     app.use('/api/crunchyroll', crunchyrollRoutes({ db, sidecar, secretKey: deps.core.secretKey, log, ...(queue !== undefined ? { queue } : {}) }));
     if (queue !== undefined) app.use('/api/sync', syncRoutes({ db, queue }));
+    app.use('/api/up-next', upNextRoutes(db));
+    app.use('/api/shows', showRoutes(db));
   }
 
   if (deps.webDist !== undefined) {
-    app.use(express.static(deps.webDist, { index: 'index.html', maxAge: '1h' }));
+    const webDist = deps.webDist;
+    app.use(express.static(webDist, { index: 'index.html', maxAge: '1h' }));
+    // The app's own paths (/library, /show/…) load the app; the API never falls through to it.
+    app.use((req, res, next) => {
+      const api = req.path.startsWith('/api/') || req.path.startsWith('/auth/') || req.path.startsWith('/health');
+      if (req.method !== 'GET' || api || !req.accepts('html')) {
+        next();
+        return;
+      }
+      res.sendFile('index.html', { root: webDist, headers: { 'cache-control': 'no-cache' } });
+    });
   }
 
   // One shape for every unexpected failure, and nothing about the internals in it.

@@ -1,6 +1,7 @@
 import PgBoss from 'pg-boss';
 import type { Logger } from '../logger.js';
 import { resolveCatalog } from '../cr/resolve.js';
+import { rebuildShows } from '../derive/rebuild.js';
 import { runSync, type SyncDeps, type SyncKind } from '../sync/run.js';
 
 /**
@@ -41,6 +42,8 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
       await resolveCatalog(deps, job.data.userId).catch((err: unknown) => {
         log.warn({ err: err instanceof Error ? err.message : String(err) }, 'catalog resolve failed; it retries after the next sync');
       });
+      const shows = await rebuildShows(deps.db, job.data.userId);
+      log.info({ shows }, 'derived state rebuilt');
     }
   });
   // Nightly: a delta for every linked owner — or the backfill, if one has never finished.
