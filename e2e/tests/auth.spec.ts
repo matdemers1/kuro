@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { Secret, TOTP } from 'otpauth';
+import { axe, completeIssuerSignIn, signInAtIssuer } from './support.js';
 
 /**
  * KURO-T-0.3 + KURO-T-0.4: first run, then both login paths (GL-001), driven in a browser against
@@ -9,27 +10,6 @@ test.describe.configure({ mode: 'serial' });
 
 const OWNER = { name: 'Owner', email: 'owner@example.com', password: 'a long enough password' };
 let totp: TOTP;
-
-async function signInAtIssuer(page: Page, subject: string) {
-  // oidc-provider's development login, then its consent screen when it asks.
-  await page.locator('input[name="login"]').fill(subject);
-  await page.locator('input[name="password"]').fill('anything');
-  await page.locator('button[type="submit"]').click();
-  const consent = page.locator('button[type="submit"]', { hasText: /continue/i });
-  if (await consent.isVisible({ timeout: 3000 }).catch(() => false)) await consent.click();
-}
-
-/**
- * After "Sign in with D3 Auth": the issuer's login form if it holds no session, else straight back to
- * Up Next. Wait for whichever renders — a fixed timeout guesses wrong on a cold CI start.
- */
-async function completeIssuerSignIn(page: Page) {
-  const login = page.locator('input[name="login"]');
-  const upNext = page.getByRole('heading', { name: 'Up Next' });
-  await expect(login.or(upNext)).toBeVisible({ timeout: 15_000 });
-  if (await login.isVisible()) await signInAtIssuer(page, 'owner-sub');
-  await expect(upNext).toBeVisible();
-}
 
 /** Each test starts in a fresh browser context; sign out only if this one is signed in. */
 async function signOut(page: Page) {
@@ -50,6 +30,7 @@ test('first run: the setup token creates the owner, then an authenticator, then 
   await expect(setupForm.locator('input[type="password"]')).toHaveAttribute('autocomplete', 'new-password');
   await expect(page.getByLabel('Setup token')).toHaveAttribute('type', 'text');
   await expect(page.getByLabel('Setup token')).toHaveAttribute('autocomplete', 'off');
+  await axe(page, 'Setup: create the owner');
   await page.getByLabel('Setup token').fill('e2e-setup-token-0123456789');
   await page.getByLabel('Your name').fill(OWNER.name);
   await page.getByLabel('Email').fill(OWNER.email);
@@ -57,12 +38,14 @@ test('first run: the setup token creates the owner, then an authenticator, then 
   await page.getByRole('button', { name: 'Create my account' }).click();
 
   await expect(page.getByRole('heading', { name: 'Add an authenticator' })).toBeVisible();
+  await axe(page, 'Setup: authenticator');
   const secret = (await page.getByTestId('totp-secret').textContent()) ?? '';
   totp = new TOTP({ secret: Secret.fromBase32(secret.trim()), digits: 6, period: 30, algorithm: 'SHA1' });
   await page.getByLabel('Code').fill(totp.generate());
   await page.getByRole('button', { name: 'Confirm' }).click();
 
   await expect(page.getByRole('heading', { name: 'Link D3 Auth' })).toBeVisible();
+  await axe(page, 'Setup: link D3 Auth');
   await page.getByRole('button', { name: 'Link D3 Auth' }).click();
   await signInAtIssuer(page, 'owner-sub');
   await expect(page.getByRole('heading', { name: 'Up Next' })).toBeVisible();
