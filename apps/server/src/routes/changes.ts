@@ -4,6 +4,7 @@ import type { Db } from '../db.js';
 import { rebuildShows } from '../derive/rebuild.js';
 import { record } from '../domain/changelog.js';
 import { restoreSeason, snapshot, type Snapshot } from './mappings.js';
+import { queueSnapshot, restoreQueue } from './rewatch.js';
 
 /**
  * The change log and undo (KURO-REQ-022). Undo restores an entry's `before`, writes its own entry
@@ -16,6 +17,12 @@ const UNDOABLE: Record<string, (db: Db, entityId: string, before: Record<string,
     if ((now?.pinned ?? false) !== after['pinned']) return 'moved_on';
     const pinned = before['pinned'] === true;
     await db.showPreference.upsert({ where: { showKey }, create: { showKey, pinned }, update: { pinned } });
+    return 'ok';
+  },
+  /** The rewatch queue, back to exactly what it was, if it has not changed since. */
+  async rewatch_queue(db, _id, before, after) {
+    if (stable(await queueSnapshot(db)) !== stable(after['rows'])) return 'moved_on';
+    await restoreQueue(db, (before['rows'] ?? []) as Awaited<ReturnType<typeof queueSnapshot>>);
     return 'ok';
   },
   /** A rating, back to its earlier score (or none), if it was not changed since. */

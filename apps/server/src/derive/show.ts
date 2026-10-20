@@ -67,6 +67,8 @@ export interface ShowOut {
   readonly lastPlayedAt: Date | null;
   /** Episodes out in the original but not yet in the owner's dub, after the last dubbed one. */
   readonly dubLag: number;
+  /** Every rewatch (KURO-T-4.2): a replay after the end opens one; replaying the last episode closes it. */
+  readonly rewatches: readonly { readonly startedAt: Date; readonly endedAt: Date | null }[];
 }
 
 /** Watched: Crunchyroll says so, or the playhead passed the credits, or 90% with no marker (KURO-REQ-011). */
@@ -135,11 +137,18 @@ export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayI
   // went back over an episode already watched after that — a rewatch.
   let completedAt: Date | null = null;
   let rewatchAt: number | null = null;
+  const rewatches: { startedAt: Date; endedAt: Date | null }[] = [];
   for (const p of [...plays].sort((a, b) => a.datePlayed.getTime() - b.datePlayed.getTime())) {
     const e = byId.get(p.crEpisodeId);
     if (lastPlayedAt === null || p.datePlayed > lastPlayedAt) lastPlayedAt = p.datePlayed;
     const replay = e !== undefined && completedAt !== null && watched.has(e.canonicalId);
     rewatchAt = replay ? (indexOf.get(e.canonicalId) ?? null) : null;
+    if (replay) {
+      const open = rewatches.at(-1);
+      if (open === undefined || open.endedAt !== null) rewatches.push({ startedAt: p.datePlayed, endedAt: null });
+      const current = rewatches.at(-1);
+      if (current !== undefined && rewatchAt === ordered.length - 1) current.endedAt = p.datePlayed;
+    }
     if (e !== undefined && isWatched(p, e)) watched.add(e.canonicalId);
     if (completedAt === null && ordered.length > 0 && ordered.every((c) => watched.has(c.id))) completedAt = p.datePlayed;
   }
@@ -207,6 +216,7 @@ export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayI
     nextIsNewSeason,
     lastPlayedAt,
     dubLag,
+    rewatches,
   };
 }
 

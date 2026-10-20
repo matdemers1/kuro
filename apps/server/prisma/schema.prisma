@@ -605,3 +605,27 @@ model ShowNote {
 
   @@map("show_note")
 }
+
+/// A rewatch of a Show (KURO-T-4.2): derived from plays — a replay after the end opens one, replaying
+/// the last episode closes it — and rebuilt whole with show_state.
+model Rewatch {
+  showKey   String    @map("show_key")
+  startedAt DateTime  @map("started_at") @db.Timestamptz(6)
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(6)
+
+  @@id([showKey, startedAt])
+  @@map("rewatch")
+}
+
+/// The owner's rewatch queue (KURO-REQ-042): ordered, with an optional reason and starting Season.
+model RewatchQueueItem {
+  showKey      String   @id @map("show_key")
+  position     Int
+  reason       String?
+  /// The Season to start from, as a catalog entry id; null starts at the beginning.
+  startEntryId String?  @map("start_entry_id")
+  addedAt      DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+
+  @@index([position])
+  @@map("rewatch_queue")
+}
