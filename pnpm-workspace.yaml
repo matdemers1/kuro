@@ -14,3 +14,13 @@ blockExoticSubdeps: true
 # esbuild installs the binary tsx and Vite run on.
 onlyBuiltDependencies:
   - esbuild
+  - '@prisma/engines'
+# Refused: prisma's own postinstall (the package script runs `prisma generate` itself).
+ignoredBuiltDependencies:
+  - prisma
+
+# prisma@7.10.0 (the CLI only) was published without the SLSA provenance 7.8.0–7.9.1 carried; its
+# runtime packages at 7.10.0 have it. Foreman and D3 Auth verified this was a publishing slip, not a
+# takeover (2026-09-16/17). Remove with the next Prisma upgrade.
+trustPolicyExclude:
+  - prisma@7.10.0

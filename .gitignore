@@ -15,3 +15,5 @@ fixtures/real/*
 !fixtures/real/.gitkeep
 # Local backups
 backups/
+# Prisma client, regenerated on install
+apps/server/src/generated/
