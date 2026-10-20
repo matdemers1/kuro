@@ -4,6 +4,7 @@ import { pino } from 'pino';
 import { createApp } from '../../src/app.js';
 import type { OidcClient } from '../../src/auth/oidc.js';
 import { createDb, type Db } from '../../src/db.js';
+import type { Logger } from '../../src/logger.js';
 
 export const SECRET_KEY = Buffer.alloc(32, 7).toString('base64');
 export const PEPPER = Buffer.alloc(32, 9).toString('base64');
@@ -14,11 +15,18 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-export async function startApp(oidc: OidcClient | null = null, setupToken?: string, databaseUrl?: string): Promise<Harness> {
+export interface StartOptions {
+  readonly setupToken?: string;
+  readonly databaseUrl?: string;
+  readonly sidecarUrl?: string;
+  readonly log?: Logger;
+}
+
+export async function startApp(oidc: OidcClient | null = null, setupToken?: string, databaseUrl?: string, more: StartOptions = {}): Promise<Harness> {
   const db = createDb(databaseUrl ?? process.env['DATABASE_URL'] ?? '');
   const app = createApp({
     version: 'test',
-    core: { db, baseUrl: 'http://localhost', secretKey: SECRET_KEY, pepper: PEPPER, oidc, log: pino({ level: 'silent' }), setupToken },
+    core: { db, baseUrl: 'http://localhost', secretKey: SECRET_KEY, pepper: PEPPER, oidc, log: more.log ?? pino({ level: 'silent' }), setupToken, sidecarUrl: more.sidecarUrl },
   });
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, () => {

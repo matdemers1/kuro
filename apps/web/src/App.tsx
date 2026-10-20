@@ -3,6 +3,7 @@ import { Button, Screen } from './components/ui.js';
 import { api, getSession, type SessionInfo } from './lib/api.js';
 import { Setup } from './screens/Setup/Setup.js';
 import { SignIn } from './screens/SignIn.js';
+import { CrunchyrollLink, type CrStatus } from './screens/Settings/CrunchyrollLink.js';
 
 /** The browser path, or '/' when rendering outside a browser (unit tests). */
 function currentPath(): string {
@@ -27,10 +28,20 @@ export function App({ initial }: { initial?: SessionInfo }) {
     const signinError = typeof window === 'undefined' ? undefined : (new URLSearchParams(window.location.search).get('signin_error') ?? undefined);
     return <SignIn oidcAvailable={session.oidcAvailable} onSignedIn={refresh} initialError={signinError} />;
   }
+  return <Home name={session.user?.displayName ?? ''} onSignOut={() => { void api('/auth/logout', { method: 'POST' }).then(refresh); }} />;
+}
+
+function Home({ name, onSignOut }: { name: string; onSignOut: () => void }) {
+  const [cr, setCr] = useState<CrStatus>();
+  useEffect(() => {
+    void api<CrStatus>('/api/crunchyroll').then(setCr, () => { setCr({ linked: false }); });
+  }, []);
   return (
     <Screen kicker="Tonight" title="Up Next">
-      <p className="text-[15px] text-muted">Signed in as {session.user?.displayName}. Your shows will appear here once Crunchyroll is linked.</p>
-      <Button kind="ghost" onClick={() => { void api('/auth/logout', { method: 'POST' }).then(refresh); }}>Sign out</Button>
+      {cr !== undefined && !cr.linked && <CrunchyrollLink status={cr} onLinked={setCr} />}
+      {cr?.linked === true && <p className="text-[15px] text-muted">Crunchyroll is linked. Your history imports next.</p>}
+      <p className="text-[13px] text-faint">Signed in as {name}.</p>
+      <Button kind="ghost" onClick={onSignOut}>Sign out</Button>
     </Screen>
   );
 }
