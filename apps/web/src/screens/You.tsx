@@ -20,6 +20,12 @@ export function You({ name, onSignOut }: { name: string; onSignOut: () => void }
       <Button kind="ghost" onClick={() => { navigate('/you/changes'); }}>Change log</Button>
       <p className="text-[13px] text-faint">Signed in as {name}.</p>
       <Button kind="ghost" onClick={onSignOut}>Sign out</Button>
+      <p className="text-[12px] text-faint">
+        Anime catalog from{' '}
+        <a className="underline" href="https://github.com/cedya77/anime-offline-database" rel="noopener">anime-offline-database</a>, under the{' '}
+        <a className="underline" href="https://opendatacommons.org/licenses/odbl/1-0/" rel="noopener">ODbL 1.0</a> and{' '}
+        <a className="underline" href="https://opendatacommons.org/licenses/dbcl/1-0/" rel="noopener">DbCL 1.0</a>.
+      </p>
     </Screen>
   );
 }

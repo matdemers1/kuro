@@ -389,3 +389,56 @@ model ChangeLog {
   @@index([at])
   @@map("change_log")
 }
+
+// ─── Catalog (KURO-ADR-002, KURO-REQ-025, KURO-REQ-026) ───────────────────
+
+/// One imported release of anime-offline-database. The newest one's age drives the stale alert.
+model CatalogRelease {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  /// owner/name on GitHub — cedya77/anime-offline-database by default, swappable by env.
+  repo        String
+  tag         String
+  publishedAt DateTime @map("published_at") @db.Timestamptz(6)
+  importedAt  DateTime @default(now()) @map("imported_at") @db.Timestamptz(6)
+  entries     Int
+  added       Int
+  retired     Int
+
+  @@unique([repo, tag])
+  @@map("catalog_release")
+}
+
+/// One catalog record: a TV cour, movie, OVA, ONA or special. The id is stable across releases —
+/// an entry whose sources change is matched back to its row through any source URL they share.
+model CatalogEntry {
+  /// `anilist:<id>`, else `mal:<id>`, else `src:<first source URL>` — fixed when first seen.
+  id          String    @id
+  title       String
+  /// TV, MOVIE, OVA, ONA, SPECIAL or UNKNOWN.
+  type        String
+  episodes    Int
+  /// FINISHED, ONGOING, UPCOMING or UNKNOWN.
+  status      String
+  season      String?
+  seasonYear  Int?      @map("season_year")
+  durationS   Int?      @map("duration_s")
+  picture     String?
+  thumbnail   String?
+  synonyms    String[]
+  sources     String[]
+  /// Untyped related entries, as provider URLs; AniList supplies the typed relations (KURO-T-2.2).
+  related     String[]
+  tags        String[]
+  studios     String[]
+  anilistId   Int?      @map("anilist_id")
+  malId       Int?      @map("mal_id")
+  /// Absent from the newest release: kept, so mappings to it surface for a remap instead of breaking.
+  retiredAt   DateTime? @map("retired_at") @db.Timestamptz(6)
+  releaseId   String    @map("release_id") @db.Uuid
+  updatedAt   DateTime  @map("updated_at") @db.Timestamptz(6)
+
+  @@index([anilistId])
+  @@index([malId])
+  @@index([retiredAt])
+  @@map("catalog_entry")
+}

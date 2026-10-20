@@ -1,3 +1,4 @@
+import { newestRelease } from '../catalog/import.js';
 import type { Db } from '../db.js';
 import type { Alerts } from '../push/sender.js';
 
@@ -7,6 +8,8 @@ import type { Alerts } from '../push/sender.js';
  * that runs every hour never repeats itself.
  */
 export const STALE_AFTER_MS = 36 * 60 * 60 * 1000;
+/** KURO-REQ-026: the newest catalog release is more than three weeks old. */
+export const CATALOG_STALE_AFTER_MS = 21 * 24 * 60 * 60 * 1000;
 
 export interface SyncHealth {
   readonly state: 'unlinked' | 'linked' | 'paused' | 'blocked';
@@ -48,6 +51,11 @@ export async function checkAlerts(db: Db, alerts: Alerts, now = new Date()): Pro
       const key = `stale:${conn.id}:${since}`;
       if (await alerts.send({ key, title: 'Sync is stale', body: 'Kurō has not synced in over 36 hours. Tap to sync now.', url: '/you' })) sent.push(key);
     }
+  }
+  const release = await newestRelease(db);
+  if (release !== null && now.getTime() - release.publishedAt.getTime() > CATALOG_STALE_AFTER_MS) {
+    const key = `catalog-stale:${release.repo}:${release.tag}`;
+    if (await alerts.send({ key, title: 'The anime catalog is out of date', body: `The newest release (${release.tag}) is over three weeks old. Check the source, or switch KURO_CATALOG_REPO.`, url: '/you' })) sent.push(key);
   }
   return sent;
 }
