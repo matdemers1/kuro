@@ -74,6 +74,10 @@ export function showRoutes(db: Db): Router {
         description: inputs.description,
         status: state.status,
         manualStatus: pref?.status ?? null,
+        dropReason: pref?.dropReason ?? null,
+        rating: (await db.rating.findUnique({ where: { target: `show:${key}` } }))?.score ?? null,
+        seasonRatings: Object.fromEntries((await db.rating.findMany({ where: { target: { in: inputs.show.items.map((i) => `season:${i.entryId}`) } } })).map((r) => [r.target.slice('season:'.length), r.score])),
+        note: (await db.showNote.findUnique({ where: { showKey: key } }))?.text ?? null,
         pinned: pref?.pinned ?? false,
         watchedEpisodes: state.watchedEpisodes,
         totalEpisodes: state.totalEpisodes,
@@ -110,9 +114,57 @@ export function showRoutes(db: Db): Router {
     })().catch(next);
   });
 
+  /** A 1–10 rating of the Show, or of one of its Seasons (KURO-REQ-041); null clears it. */
+  const Score = z.object({ score: z.number().int().min(1).max(10).nullable() });
+  const rate = (target: (req: import('express').Request) => string) => (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
+    const body = Score.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: 'score must be a whole number from 1 to 10, or null' });
+      return;
+    }
+    const userId = req.auth?.userId ?? '';
+    const key = target(req);
+    void (async () => {
+      const before = await db.rating.findUnique({ where: { target: key } });
+      if (body.data.score === null) await db.rating.deleteMany({ where: { target: key } });
+      else await db.rating.upsert({ where: { target: key }, create: { target: key, score: body.data.score }, update: { score: body.data.score } });
+      await record(db, { userId, entity: 'rating', entityId: key, action: body.data.score === null ? 'cleared' : 'rated', before: { score: before?.score ?? null }, after: { score: body.data.score } });
+      res.status(204).end();
+    })().catch(next);
+  };
+  const param = (req: import('express').Request, name: string) => {
+    const v: unknown = req.params[name];
+    return typeof v === 'string' ? v : '';
+  };
+  router.put('/:key/rating', rate((req) => `show:${param(req, 'key')}`));
+  router.put('/:key/seasons/:entryId/rating', rate((req) => `season:${param(req, 'entryId')}`));
+
+  /** A free-text note on the Show (KURO-REQ-044); an empty one removes it. Change-logged. */
+  router.put('/:key/note', (req, res, next) => {
+    const body = z.object({ text: z.string().max(10_000) }).safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: 'text is required (up to 10,000 characters)' });
+      return;
+    }
+    const userId = req.auth?.userId ?? '';
+    const key = req.params['key'];
+    void (async () => {
+      const before = await db.showNote.findUnique({ where: { showKey: key } });
+      const text = body.data.text.trim();
+      if (text === (before?.text ?? '')) {
+        res.status(204).end();
+        return;
+      }
+      if (text === '') await db.showNote.deleteMany({ where: { showKey: key } });
+      else await db.showNote.upsert({ where: { showKey: key }, create: { showKey: key, text }, update: { text } });
+      await record(db, { userId, entity: 'show_note', entityId: key, action: text === '' ? 'removed' : 'noted', before: { text: before?.text ?? null }, after: { text: text === '' ? null : text } });
+      res.status(204).end();
+    })().catch(next);
+  });
+
   /** The owner's own status — Plan to watch, Dropped, or neither (derived) — change-logged (KURO-REQ-033). */
   router.put('/:key/status', (req, res, next) => {
-    const body = z.object({ status: z.enum(['plan_to_watch', 'dropped']).nullable() }).safeParse(req.body);
+    const body = z.object({ status: z.enum(['plan_to_watch', 'dropped']).nullable(), reason: z.enum(['pacing', 'not_for_me', 'got_busy']).optional() }).safeParse(req.body);
     const key = req.params['key'];
     if (!body.success || !(key.startsWith('cr:') || key.startsWith('show:'))) {
       res.status(400).json({ error: 'status must be plan_to_watch, dropped or null' });
@@ -122,9 +174,10 @@ export function showRoutes(db: Db): Router {
     void (async () => {
       const before = await db.showPreference.findUnique({ where: { showKey: key } });
       const status = body.data.status;
-      const data = { status, statusAt: status === null ? null : new Date() };
+      // Why it was dropped (KURO-REQ-043); cleared with the status.
+      const data = { status, statusAt: status === null ? null : new Date(), dropReason: status === 'dropped' ? (body.data.reason ?? null) : null };
       await db.showPreference.upsert({ where: { showKey: key }, create: { showKey: key, ...data }, update: data });
-      await record(db, { userId, entity: 'show_status', entityId: key, action: status ?? 'cleared', before: { status: before?.status ?? null, statusAt: before?.statusAt?.toISOString() ?? null }, after: { status, statusAt: data.statusAt?.toISOString() ?? null } });
+      await record(db, { userId, entity: 'show_status', entityId: key, action: status ?? 'cleared', before: { status: before?.status ?? null, statusAt: before?.statusAt?.toISOString() ?? null, dropReason: before?.dropReason ?? null }, after: { status, statusAt: data.statusAt?.toISOString() ?? null, dropReason: data.dropReason } });
       await rebuildShows(db, userId);
       res.status(204).end();
     })().catch(next);

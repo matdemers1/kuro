@@ -344,6 +344,8 @@ model ShowPreference {
   status    String?
   /// When it was set: a play after a drop means the owner came back to the Show.
   statusAt  DateTime? @map("status_at") @db.Timestamptz(6)
+  /// Why it was dropped (KURO-REQ-043): pacing, not_for_me or got_busy.
+  dropReason String?  @map("drop_reason")
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("show_preference")
@@ -583,4 +585,23 @@ model ScheduleAnime {
 
   @@index([anilistId])
   @@map("schedule_anime")
+}
+
+/// The owner's 1–10 rating of a Show, or of one of its Seasons (KURO-REQ-041). Inputs, never derived.
+model Rating {
+  /// `show:<show key>` for the Show, or `season:<catalog entry id>` for one Season.
+  target    String   @id
+  score     Int
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("rating")
+}
+
+/// The owner's free-text note on a Show (KURO-REQ-044).
+model ShowNote {
+  showKey   String   @id @map("show_key")
+  text      String
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("show_note")
 }

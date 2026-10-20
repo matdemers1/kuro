@@ -6,6 +6,7 @@ import { api } from '../../lib/api.js';
 import { audio, hours, se, statusLabel } from '../../lib/format.js';
 import { navigate } from '../../lib/router.js';
 import { GroupingEditor } from '../GroupingEditor/GroupingEditor.js';
+import { DROP_REASON, DropChooser, NoteBox, RatingRow, SeasonScore } from './Taste.js';
 
 interface Episode {
   crEpisodeId: string;
@@ -27,6 +28,10 @@ interface ShowDetail {
   status: string;
   /** The owner's own status, when set: plan_to_watch or dropped. */
   manualStatus?: string | null;
+  dropReason?: string | null;
+  rating?: number | null;
+  seasonRatings?: Record<string, number>;
+  note?: string | null;
   pinned: boolean;
   watchedEpisodes: number;
   totalEpisodes: number;
@@ -72,6 +77,7 @@ const tabOf = (e: Episode) => e.seasonId ?? `S${String(e.seasonNumber)}`;
 export function Show({ showKey }: { showKey: string }) {
   const [show, setShow] = useState<ShowDetail | null>();
   const [editing, setEditing] = useState(false);
+  const [dropping, setDropping] = useState(false);
   const [reload, setReload] = useState(0);
   const [season, setSeason] = useState<string>();
   useEffect(() => {
@@ -93,10 +99,14 @@ export function Show({ showKey }: { showKey: string }) {
   const tabs = [...new Map(show.episodes.map((e) => [tabOf(e), e.seasonNumber])).entries()];
   const labels = new Map(tabs.map(([key, n], i) => [key, tabs.filter(([, m]) => m === n).length > 1 ? `S${String(n)} · ${String(i + 1)}` : `S${String(n)}`]));
   const pct = show.totalEpisodes > 0 ? Math.round((show.watchedEpisodes / show.totalEpisodes) * 100) : 0;
-  const setStatus = (status: 'plan_to_watch' | 'dropped' | null) => {
-    void api(`/api/shows/${encodeURIComponent(showKey)}/status`, { method: 'PUT', body: { status } })
+  const setStatus = (status: 'plan_to_watch' | 'dropped' | null, reason?: string) => {
+    setDropping(false);
+    void api(`/api/shows/${encodeURIComponent(showKey)}/status`, { method: 'PUT', body: { status, ...(reason === undefined ? {} : { reason }) } })
       .then(() => api<ShowDetail>(`/api/shows/${encodeURIComponent(showKey)}`))
       .then(setShow);
+  };
+  const rate = (path: string, score: number | null, apply: (s: ShowDetail) => ShowDetail) => {
+    void api(`/api/shows/${encodeURIComponent(showKey)}${path}`, { method: 'PUT', body: { score } }).then(() => { setShow((cur) => (cur === null || cur === undefined ? cur : apply(cur))); });
   };
   const togglePin = () => {
     void api(`/api/shows/${encodeURIComponent(showKey)}/pin`, { method: 'PUT', body: { pinned: !show.pinned } }).then(() => { setShow({ ...show, pinned: !show.pinned }); });
@@ -118,7 +128,7 @@ export function Show({ showKey }: { showKey: string }) {
           </button>
           {/* Dropped and Plan to watch are the owner's alone; every other status is derived. */}
           {show.manualStatus !== 'dropped' && show.status !== 'completed' && (
-            <button type="button" onClick={() => { setStatus('dropped'); }} className="rounded-full border border-line-strong px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-muted uppercase">Drop</button>
+            <button type="button" onClick={() => { setDropping(true); }} className="rounded-full border border-line-strong px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-muted uppercase">Drop</button>
           )}
           {show.manualStatus !== 'plan_to_watch' && show.watchedEpisodes === 0 && (
             <button type="button" onClick={() => { setStatus('plan_to_watch'); }} className="rounded-full border border-line-strong px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-muted uppercase">Plan to watch</button>
@@ -127,6 +137,10 @@ export function Show({ showKey }: { showKey: string }) {
             <button type="button" onClick={() => { setStatus(null); }} className="rounded-full border border-line-strong px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-muted uppercase">Back to automatic</button>
           )}
         </div>
+        {dropping && <DropChooser onDrop={(reason) => { setStatus('dropped', reason); }} onCancel={() => { setDropping(false); }} />}
+        {show.status === 'dropped' && show.dropReason !== null && show.dropReason !== undefined && (
+          <p className="text-[13px] text-faint">Dropped — {DROP_REASON[show.dropReason] ?? show.dropReason}.</p>
+        )}
         <div className="h-1 w-full overflow-hidden rounded-full bg-raised" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Show progress">
           <div className="h-full bg-kin" style={{ width: `${String(pct)}%` }} />
         </div>
@@ -152,11 +166,25 @@ export function Show({ showKey }: { showKey: string }) {
                   <span className={`w-14 shrink-0 text-[11px] font-medium tracking-[0.6px] uppercase ${it.kind === 'extra' ? 'text-kin' : 'text-muted'}`}>{it.kind === 'extra' ? 'Extra' : 'Season'}</span>
                   <span className="min-w-0 flex-1">{it.title}</span>
                   <span className="shrink-0 font-mono text-[12px] text-faint">{[it.type === 'TV' ? null : it.type.toLowerCase(), it.episodes > 1 ? `${String(it.episodes)} eps` : null, it.year].filter((x) => x !== null).join(' · ')}{it.kind === 'extra' && !it.required ? ' · optional' : ''}</span>
+                  {it.kind === 'season' && (
+                    <SeasonScore
+                      title={it.title}
+                      score={show.seasonRatings?.[it.entryId] ?? null}
+                      onRate={(score) => {
+                        rate(`/seasons/${encodeURIComponent(it.entryId)}/rating`, score, (cur) => ({
+                          ...cur,
+                          seasonRatings: Object.fromEntries([...Object.entries(cur.seasonRatings ?? {}).filter(([k]) => k !== it.entryId), ...(score === null ? [] : [[it.entryId, score] as const])]),
+                        }));
+                      }}
+                    />
+                  )}
                 </li>
               ))}
             </ol>
           </section>
         )}
+        <RatingRow label="Your rating" score={show.rating ?? null} onRate={(score) => { rate('/rating', score, (cur) => ({ ...cur, rating: score })); }} />
+        <NoteBox key={show.showKey} showKey={show.showKey} initial={show.note ?? null} />
         {(show.items?.length ?? 0) > 0 && !editing && (
           <Button kind="ghost" className="self-start" onClick={() => { setEditing(true); }}>Edit grouping</Button>
         )}
