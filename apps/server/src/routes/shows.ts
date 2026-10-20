@@ -15,11 +15,30 @@ export function showRoutes(db: Db): Router {
   const router = Router();
   router.use(requireUser);
 
+  /** Every Show, with the Franchise it belongs to (KURO-REQ-035): the Library groups by it. */
   router.get('/', (_req, res, next) => {
     void (async () => {
-      const [states, prefs] = await Promise.all([db.showState.findMany({ orderBy: { title: 'asc' } }), db.showPreference.findMany()]);
+      const [states, prefs, shows] = await Promise.all([db.showState.findMany({ orderBy: { title: 'asc' } }), db.showPreference.findMany(), db.show.findMany({ select: { showKey: true, title: true, franchiseKey: true } })]);
       const pinned = new Set(prefs.filter((p) => p.pinned).map((p) => p.showKey));
-      res.json({ items: states.map((s) => ({ showKey: s.showKey, title: s.title, status: s.status, watchedEpisodes: s.watchedEpisodes, totalEpisodes: s.totalEpisodes, pinned: pinned.has(s.showKey), lastPlayedAt: s.lastPlayedAt?.toISOString() ?? null })) });
+      const byKey = new Map(shows.map((s) => [s.showKey, s]));
+      // A Franchise is named for its earliest Show — the one in its key.
+      const franchiseTitle = (key: string) => byKey.get(key.replace(/^fr:/, ''))?.title ?? null;
+      res.json({
+        items: states.map((s) => {
+          const franchiseKey = byKey.get(s.showKey)?.franchiseKey ?? `fr:${s.showKey}`;
+          return {
+            showKey: s.showKey,
+            title: s.title,
+            status: s.status,
+            watchedEpisodes: s.watchedEpisodes,
+            totalEpisodes: s.totalEpisodes,
+            pinned: pinned.has(s.showKey),
+            lastPlayedAt: s.lastPlayedAt?.toISOString() ?? null,
+            franchiseKey,
+            franchiseTitle: franchiseTitle(franchiseKey) ?? s.title,
+          };
+        }),
+      });
     })().catch(next);
   });
 

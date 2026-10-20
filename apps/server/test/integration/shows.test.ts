@@ -111,6 +111,18 @@ describe('Shows from matched seasons (KURO-T-2.5)', () => {
     expect(d.franchise.map((f) => f.showKey)).toEqual(['show:anilist:7005']);
   });
 
+  it('the Library lists each Show with its Franchise, and the Franchise lists its Shows in watch order', async () => {
+    const lib = await get<{ items: { showKey: string; franchiseKey: string; franchiseTitle: string }[] }>('/api/shows');
+    const blade = lib.items.find((i) => i.showKey === KEY);
+    const academy = lib.items.find((i) => i.showKey === 'show:anilist:7005');
+    expect(blade?.franchiseKey).toBe(academy?.franchiseKey);
+    expect(blade?.franchiseTitle).toBe('Blade');
+    const f = await get<{ title: string; shows: { showKey: string; seasons: number; extras: number }[] }>(`/api/franchises/${encodeURIComponent(blade?.franchiseKey ?? '')}`);
+    expect(f.title).toBe('Blade');
+    expect(f.shows.map((x) => [x.showKey, x.seasons, x.extras])).toEqual([[KEY, 3, 1], ['show:anilist:7005', 1, 0]]);
+    expect((await fetch(`${h.base}/api/franchises/fr%3Anope`, { headers: { cookie } })).status).toBe(404);
+  });
+
   it('two rebuilds produce identical Shows (KURO-ADR-004)', async () => {
     const snap = async () => JSON.stringify(await h.db.show.findMany({ orderBy: { showKey: 'asc' }, include: { items: { orderBy: { position: 'asc' } } }, omit: { derivedAt: true } }));
     const first = await snap();

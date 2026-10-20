@@ -11,6 +11,7 @@ import { UpNext } from './screens/UpNext.js';
 import { You } from './screens/You.js';
 import { ChangeLog } from './screens/ChangeLog.js';
 import { Review } from './screens/Review/Review.js';
+import { Franchise } from './screens/Franchise.js';
 
 /** The browser path, or '/' when rendering outside a browser (unit tests). */
 function currentPath(): string {
@@ -47,6 +48,7 @@ function Signed({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   else if (path === '/you') screen = <You name={name} onSignOut={onSignOut} />;
   else if (path === '/you/changes') screen = <ChangeLog />;
   else if (path === '/review') screen = <Review />;
+  else if (path.startsWith('/franchise/')) screen = <Franchise franchiseKey={decodeURIComponent(path.slice('/franchise/'.length))} />;
   else screen = <UpNext />;
   return <AppShell path={path}>{screen}</AppShell>;
 }
