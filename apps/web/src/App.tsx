@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Screen } from './components/ui.js';
+import { AppShell } from './components/AppShell.js';
 import { api, getSession, type SessionInfo } from './lib/api.js';
 import { Setup } from './screens/Setup/Setup.js';
 import { SignIn } from './screens/SignIn.js';
-import { CrunchyrollLink, type CrStatus } from './screens/Settings/CrunchyrollLink.js';
-import { ImportProgress } from './screens/ImportProgress.js';
+import { usePath } from './lib/router.js';
+import { Library } from './screens/Library.js';
+import { Show } from './screens/Show/Show.js';
+import { ThisSeason } from './screens/ThisSeason.js';
+import { UpNext } from './screens/UpNext.js';
+import { You } from './screens/You.js';
 
 /** The browser path, or '/' when rendering outside a browser (unit tests). */
 function currentPath(): string {
@@ -29,20 +33,16 @@ export function App({ initial }: { initial?: SessionInfo }) {
     const signinError = typeof window === 'undefined' ? undefined : (new URLSearchParams(window.location.search).get('signin_error') ?? undefined);
     return <SignIn oidcAvailable={session.oidcAvailable} onSignedIn={refresh} initialError={signinError} />;
   }
-  return <Home name={session.user?.displayName ?? ''} onSignOut={() => { void api('/auth/logout', { method: 'POST' }).then(refresh); }} />;
+  return <Signed name={session.user?.displayName ?? ''} onSignOut={() => { void api('/auth/logout', { method: 'POST' }).then(() => { window.history.replaceState(null, '', '/'); refresh(); }); }} />;
 }
 
-function Home({ name, onSignOut }: { name: string; onSignOut: () => void }) {
-  const [cr, setCr] = useState<CrStatus>();
-  useEffect(() => {
-    void api<CrStatus>('/api/crunchyroll').then(setCr, () => { setCr({ linked: false }); });
-  }, []);
-  return (
-    <Screen kicker="Tonight" title="Up Next">
-      {cr !== undefined && !cr.linked && <CrunchyrollLink status={cr} onLinked={setCr} />}
-      {cr?.linked === true && <ImportProgress />}
-      <p className="text-[13px] text-faint">Signed in as {name}.</p>
-      <Button kind="ghost" onClick={onSignOut}>Sign out</Button>
-    </Screen>
-  );
+function Signed({ name, onSignOut }: { name: string; onSignOut: () => void }) {
+  const path = usePath();
+  let screen;
+  if (path.startsWith('/show/')) screen = <Show showKey={decodeURIComponent(path.slice('/show/'.length))} />;
+  else if (path === '/season') screen = <ThisSeason />;
+  else if (path === '/library') screen = <Library />;
+  else if (path === '/you') screen = <You name={name} onSignOut={onSignOut} />;
+  else screen = <UpNext />;
+  return <AppShell path={path}>{screen}</AppShell>;
 }

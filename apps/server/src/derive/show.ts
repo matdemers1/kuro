@@ -174,3 +174,50 @@ export function upNext(rows: readonly UpNextRow[]): { showKey: string; group: Up
     .sort((a, b) => rank[a.group] - rank[b.group] || (b.r.lastPlayedAt?.getTime() ?? 0) - (a.r.lastPlayedAt?.getTime() ?? 0) || a.r.showKey.localeCompare(b.r.showKey))
     .map(({ r, group }) => ({ showKey: r.showKey, group }));
 }
+
+export interface EpisodeRow {
+  readonly crEpisodeId: string;
+  readonly seasonNumber: number;
+  readonly episodeNumber: number | null;
+  readonly title: string;
+  readonly durationS: number;
+  readonly audioLocale: string | null;
+  readonly watched: boolean;
+  readonly lastWatchedAt: Date | null;
+  /** Past the owner's position: the title must stay hidden until tapped (KURO-REQ-018). */
+  readonly spoiler: boolean;
+  readonly isNext: boolean;
+}
+
+/** The Show's episode list in watch order, one row per canonical episode, in the owner's language. */
+export function episodeList(episodes: readonly EpisodeIn[], plays: readonly PlayIn[], fallbackLocale: string | null = 'en-US'): EpisodeRow[] {
+  const byId = new Map(episodes.map((e) => [e.id, e]));
+  const ordered = canonicalEpisodes(episodes);
+  const watchedAt = new Map<string, Date>();
+  for (const p of plays) {
+    const e = byId.get(p.crEpisodeId);
+    if (e === undefined || !isWatched(p, e)) continue;
+    const prev = watchedAt.get(e.canonicalId);
+    if (prev === undefined || p.datePlayed > prev) watchedAt.set(e.canonicalId, p.datePlayed);
+  }
+  let lastIndex = -1;
+  ordered.forEach((c, i) => {
+    if (watchedAt.has(c.id)) lastIndex = i;
+  });
+  const locale = preferredLocale(plays, byId, fallbackLocale);
+  return ordered.map((c, i) => {
+    const v = c.versions.find((x) => x.audioLocale === locale) ?? c.primary;
+    return {
+      crEpisodeId: v.id,
+      seasonNumber: c.primary.seasonNumber,
+      episodeNumber: c.primary.episodeNumber,
+      title: v.title,
+      durationS: v.durationS,
+      audioLocale: v.audioLocale,
+      watched: watchedAt.has(c.id),
+      lastWatchedAt: watchedAt.get(c.id) ?? null,
+      spoiler: i > lastIndex + 1,
+      isNext: i === lastIndex + 1,
+    };
+  });
+}

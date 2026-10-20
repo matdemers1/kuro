@@ -31,9 +31,9 @@ export function Field({ label, hint, error, ...props }: InputHTMLAttributes<HTML
   );
 }
 
-export function Screen({ kicker, title, children }: { kicker?: string; title: string; children: ReactNode }) {
+export function Screen({ kicker, title, wide = false, children }: { kicker?: string; title: string; wide?: boolean; children: ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 bg-canvas px-4 pt-12 pb-10 text-ink">
+    <main className={`mx-auto flex min-h-dvh w-full ${wide ? 'max-w-5xl' : 'max-w-md lg:max-w-2xl'} flex-col gap-6 bg-canvas px-4 pt-12 pb-10 text-ink lg:px-10`}>
       <header className="flex flex-col gap-1">
         {kicker !== undefined && <p className="text-[11px] font-medium tracking-[0.6px] text-shu uppercase">{kicker}</p>}
         <h1 className="font-display text-[40px] leading-[46px] font-extrabold">{title}</h1>

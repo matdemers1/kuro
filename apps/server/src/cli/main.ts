@@ -1,7 +1,8 @@
+import { seedDev } from './seedDev.js';
 import { spike } from './spike.js';
 
 /** `kuro <command>` — operator commands, run inside the server image or with tsx. */
-const commands: Record<string, () => Promise<number>> = { spike: () => spike() };
+const commands: Record<string, () => Promise<number>> = { spike: () => spike(), 'seed-dev': () => seedDev() };
 
 const name = process.argv[2] ?? '';
 const command = commands[name];
