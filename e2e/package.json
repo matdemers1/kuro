@@ -1,0 +1,17 @@
+{
+  "name": "e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright against the built server + web, with a local mock of D3 Auth",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "oidc-provider": "^9.5.0",
+    "otpauth": "^9.5.2",
+    "pg": "^8.23.0"
+  }
+}

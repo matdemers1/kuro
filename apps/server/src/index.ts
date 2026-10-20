@@ -14,7 +14,7 @@ const oidc = await createOidcClient(config, log);
 createApp({
   version,
   webDist: config.WEB_DIST,
-  core: { db, baseUrl: config.BASE_URL, secretKey, pepper, oidc, log },
+  core: { db, baseUrl: config.BASE_URL, secretKey, pepper, oidc, log, setupToken: config.SETUP_TOKEN },
 }).listen(config.PORT, () => {
   log.info({ port: config.PORT, version, oidc: oidc !== null }, 'kuro-server listening');
 });

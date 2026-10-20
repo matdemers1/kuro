@@ -1,9 +1,36 @@
-export function App() {
+import { useCallback, useEffect, useState } from 'react';
+import { Button, Screen } from './components/ui.js';
+import { api, getSession, type SessionInfo } from './lib/api.js';
+import { Setup } from './screens/Setup/Setup.js';
+import { SignIn } from './screens/SignIn.js';
+
+/** The browser path, or '/' when rendering outside a browser (unit tests). */
+function currentPath(): string {
+  return typeof window === 'undefined' ? '/' : window.location.pathname;
+}
+
+export function App({ initial }: { initial?: SessionInfo }) {
+  const [session, setSession] = useState<SessionInfo | undefined>(initial);
+  const [setupDone, setSetupDone] = useState(false);
+  const refresh = useCallback(() => {
+    void getSession().then(setSession);
+  }, []);
+  useEffect(() => {
+    if (initial === undefined) refresh();
+  }, [initial, refresh]);
+
+  if (session === undefined) return <main className="min-h-dvh bg-canvas" aria-busy="true" />;
+  if (session.setupRequired === true || (session.authenticated && !setupDone && session.totpEnrolled === false && currentPath() === '/setup')) {
+    return <Setup oidcAvailable={session.oidcAvailable} onDone={() => { setSetupDone(true); window.history.replaceState(null, '', '/'); refresh(); }} />;
+  }
+  if (!session.authenticated) {
+    const signinError = typeof window === 'undefined' ? undefined : (new URLSearchParams(window.location.search).get('signin_error') ?? undefined);
+    return <SignIn oidcAvailable={session.oidcAvailable} onSignedIn={refresh} initialError={signinError} />;
+  }
   return (
-    <main className="min-h-dvh bg-canvas px-4 py-8 text-ink">
-      <p className="font-sans text-[11px] font-medium tracking-[0.6px] text-shu uppercase">Tonight</p>
-      <h1 className="font-display text-[40px] leading-[46px] font-extrabold">Up Next</h1>
-      <p className="mt-4 text-[15px] text-muted">Kurō is being built. Your shows will appear here.</p>
-    </main>
+    <Screen kicker="Tonight" title="Up Next">
+      <p className="text-[15px] text-muted">Signed in as {session.user?.displayName}. Your shows will appear here once Crunchyroll is linked.</p>
+      <Button kind="ghost" onClick={() => { void api('/auth/logout', { method: 'POST' }).then(refresh); }}>Sign out</Button>
+    </Screen>
   );
 }
