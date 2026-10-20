@@ -7,3 +7,15 @@ publish = false
 description = "Kurō's internal Crunchyroll sidecar (KURO-ADR-009). Stateless; no published port."
 
 [dependencies]
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
+[profile.release]
+strip = true
+lto = "thin"

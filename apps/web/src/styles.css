@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+/*
+ * Kurō tokens — "late-night ink". Mirrors the Figma file "Kurō (KURO)": Primitives → Color
+ * (Dark default, Light) → Layout. Dark is designed first; light follows the system setting.
+ */
+:root {
+  --color-bg-canvas: #0e0d12;
+  --color-bg-surface: #17151d;
+  --color-bg-raised: #211e29;
+  --color-border-default: #2e2a38;
+  --color-border-strong: #3d3848;
+  --color-text-primary: #f5efe3;
+  --color-text-secondary: #a49c8e;
+  --color-text-faint: #6e675e;
+  --color-text-on-accent: #fffdf8;
+  --color-accent-shu: #e5483a;
+  --color-accent-kin: #e8b75a;
+  --color-status-ok: #7fb77e;
+  --color-status-info: #7c93e0;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-bg-canvas: #f5efe3;
+    --color-bg-surface: #fffdf8;
+    --color-bg-raised: #ece4d4;
+    --color-border-default: #d9cfbc;
+    --color-border-strong: #a49c8e;
+    --color-text-primary: #17151d;
+    --color-text-secondary: #5e574d;
+    --color-text-faint: #8e8679;
+    --color-accent-shu: #c8372a;
+    --color-accent-kin: #b9862a;
+    --color-status-ok: #4e8a4d;
+    --color-status-info: #3f5bb8;
+    color-scheme: light;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--color-bg-canvas);
+  --color-surface: var(--color-bg-surface);
+  --color-raised: var(--color-bg-raised);
+  --color-line: var(--color-border-default);
+  --color-line-strong: var(--color-border-strong);
+  --color-ink: var(--color-text-primary);
+  --color-muted: var(--color-text-secondary);
+  --color-faint: var(--color-text-faint);
+  --color-on-accent: var(--color-text-on-accent);
+  --color-shu: var(--color-accent-shu);
+  --color-kin: var(--color-accent-kin);
+  --color-ok: var(--color-status-ok);
+  --color-info: var(--color-status-info);
+  --font-display: 'Shippori Mincho B1', serif;
+  --font-sans: 'Zen Kaku Gothic New', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}

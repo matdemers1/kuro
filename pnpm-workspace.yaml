@@ -1,2 +1,16 @@
 packages:
-  - "apps/*"
+  - apps/*
+
+# Supply chain — the same policy Foreman and D3 Auth run. A package published in the last seven
+# days is not installed (most malicious releases are found and pulled inside that window); a
+# dependency whose provenance gets weaker than an earlier release is refused; a transitive
+# dependency from anywhere but the registry is refused.
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 43200
+blockExoticSubdeps: true
+
+# pnpm 10 runs no install scripts unless named, so each one here is a decision.
+# esbuild installs the binary tsx and Vite run on.
+onlyBuiltDependencies:
+  - esbuild

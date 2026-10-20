@@ -1,13 +1,30 @@
 {
   "name": "kuro",
   "private": true,
+  "version": "0.0.0",
+  "description": "Kurō — a self-hosted, single-user anime tracker: your Crunchyroll history, by show not by season",
   "license": "Apache-2.0",
   "type": "module",
-  "packageManager": "pnpm@10.0.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22.13.0",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.34.5",
   "scripts": {
-    "lint": "echo \"lint: set up in KURO-T-0.1\"",
-    "typecheck": "echo \"typecheck: set up in KURO-T-0.1\"",
-    "test": "echo \"test: set up in KURO-T-0.1\""
+    "lint": "eslint .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "node --test scripts/scan-personal-data.test.mjs && pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build",
+    "scan": "node scripts/scan-personal-data.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.2",
+    "eslint": "^10.10.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "globals": "^17.12.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.0"
   }
 }
