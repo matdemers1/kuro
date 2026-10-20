@@ -31,6 +31,13 @@ async function signOut(page: Page) {
 test('first run: the setup token creates the owner, then an authenticator, then a D3 Auth link', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Welcome to Kurō' })).toBeVisible();
+  // Password managers save the first password field as the login, so the new password must be the
+  // only one and the setup token must not look like a credential.
+  const setupForm = page.getByRole('form', { name: 'Create the owner' });
+  await expect(setupForm.locator('input[type="password"]')).toHaveCount(1);
+  await expect(setupForm.locator('input[type="password"]')).toHaveAttribute('autocomplete', 'new-password');
+  await expect(page.getByLabel('Setup token')).toHaveAttribute('type', 'text');
+  await expect(page.getByLabel('Setup token')).toHaveAttribute('autocomplete', 'off');
   await page.getByLabel('Setup token').fill('e2e-setup-token-0123456789');
   await page.getByLabel('Your name').fill(OWNER.name);
   await page.getByLabel('Email').fill(OWNER.email);

@@ -43,10 +43,10 @@ function OwnerStep({ onNext }: { onNext: () => void }) {
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)} aria-label="Create the owner">
       <p className="text-[15px] text-muted">Kurō has one owner — you. Once this account exists, setup closes for good.</p>
-      <Field label="Setup token" type="password" required value={form.setupToken} onChange={set('setupToken')} hint="SETUP_TOKEN from the server environment." />
+      <Field label="Setup token" type="text" name="kuro-setup-token" notCredential className="font-mono" required value={form.setupToken} onChange={set('setupToken')} hint="SETUP_TOKEN from the server environment. Single-use, and not saved." />
       <Field label="Your name" required value={form.displayName} onChange={set('displayName')} autoComplete="name" />
-      <Field label="Email" type="email" required value={form.email} onChange={set('email')} autoComplete="username" />
-      <Field label="Password" type="password" required minLength={12} value={form.password} onChange={set('password')} autoComplete="new-password" hint="At least 12 characters." />
+      <Field label="Email" type="email" name="email" required value={form.email} onChange={set('email')} autoComplete="username" />
+      <Field label="Password" type="password" name="new-password" required minLength={12} value={form.password} onChange={set('password')} autoComplete="new-password" hint="At least 12 characters." />
       {error !== undefined && <p role="alert" className="text-[13px] text-shu">{error}</p>}
       <Button type="submit" disabled={busy}>Create my account</Button>
     </form>
