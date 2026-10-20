@@ -1,0 +1,9 @@
+[package]
+name = "kuro-cr"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "Kurō's internal Crunchyroll sidecar (KURO-ADR-009). Stateless; no published port."
+
+[dependencies]

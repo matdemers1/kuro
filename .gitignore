@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+target/
+playwright-report/
+test-results/
+# Your real Crunchyroll export never leaves your machine (KURO-REQ-057)
+fixtures/real/*
+!fixtures/real/.gitkeep
+# Local backups
+backups/

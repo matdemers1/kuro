@@ -1,0 +1,13 @@
+{
+  "name": "kuro",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "lint": "echo \"lint: set up in KURO-T-0.1\"",
+    "typecheck": "echo \"typecheck: set up in KURO-T-0.1\"",
+    "test": "echo \"test: set up in KURO-T-0.1\""
+  }
+}

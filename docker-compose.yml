@@ -1,0 +1,22 @@
+# Skeleton — KURO-T-0.7 fills this in. The sidecar publishes no port (KURO-REQ-056).
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: kuro
+      POSTGRES_PASSWORD: kuro
+      POSTGRES_DB: kuro
+    volumes: [pgdata:/var/lib/postgresql/data]
+  kuro-cr:
+    build: ./crates/kuro-cr
+    # no ports: internal only
+  kuro-server:
+    build: .
+    env_file: .env
+    depends_on: [postgres, kuro-cr]
+    ports: ["8080:8080"]
+    volumes: [images:/data/images, backups:/data/backups]
+volumes:
+  pgdata:
+  images:
+  backups:
