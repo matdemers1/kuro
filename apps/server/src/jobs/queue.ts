@@ -13,13 +13,17 @@ export interface SyncQueue {
 }
 
 const QUEUE = 'cr-sync';
+const NIGHTLY = 'cr-sync-nightly';
+
+/** 03:00 in the owner's time zone (KURO-REQ-005). */
+export const NIGHTLY_CRON = '0 3 * * *';
 
 interface SyncJob {
   userId: string;
   kind: SyncKind;
 }
 
-export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger): Promise<SyncQueue> {
+export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York'): Promise<SyncQueue> {
   const boss = new PgBoss({ connectionString: databaseUrl, schema: 'pgboss' });
   boss.on('error', (err: unknown) => {
     log.error({ err: err instanceof Error ? err.message : String(err) }, 'job queue error');
@@ -32,7 +36,15 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
     const outcome = await runSync(deps, job.data.userId, job.data.kind);
     log.info({ kind: job.data.kind, status: outcome.status }, 'sync job finished');
   });
-  // A backfill that was mid-run when the process stopped resumes on the next boot.
+  // Nightly: a delta for every linked owner — or the backfill, if one has never finished.
+  await boss.createQueue(NIGHTLY);
+  await boss.schedule(NIGHTLY, NIGHTLY_CRON, {}, { tz: timezone });
+  await boss.work(NIGHTLY, { batchSize: 1 }, async () => {
+    for (const { userId, kind } of await nightlyPlan(deps)) {
+      await boss.send(QUEUE, { userId, kind } satisfies SyncJob, { singletonKey: userId, retryLimit: 0 });
+    }
+  });
+  log.info({ cron: NIGHTLY_CRON, timezone }, 'nightly sync scheduled');
   return {
     async request(userId, kind) {
       await boss.send(QUEUE, { userId, kind } satisfies SyncJob, { singletonKey: userId, retryLimit: 0 });
@@ -59,4 +71,10 @@ export function inlineQueue(deps: SyncDeps): SyncQueue & { readonly done: Promis
 export async function resumeInterrupted(deps: SyncDeps, queue: SyncQueue): Promise<void> {
   const stuck = await deps.db.syncRun.findMany({ where: { status: 'running', kind: 'backfill' }, include: { crConnection: { select: { userId: true } } } });
   for (const run of stuck) await queue.request(run.crConnection.userId, 'backfill');
+}
+
+/** What the nightly run queues: one run per linked connection that is not waiting on a re-link. */
+export async function nightlyPlan(deps: Pick<SyncDeps, 'db'>): Promise<{ userId: string; kind: SyncKind }[]> {
+  const conns = await deps.db.crConnection.findMany({ where: { state: { not: 'paused' } }, select: { userId: true, lastSuccessAt: true } });
+  return conns.map((c) => ({ userId: c.userId, kind: c.lastSuccessAt === null ? 'backfill' : 'delta' }));
 }

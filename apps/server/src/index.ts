@@ -16,7 +16,7 @@ const db = createDb(databaseUrl);
 const oidc = await createOidcClient(config, log);
 const sidecar = new CrSidecar(config.KURO_CR_URL);
 const syncDeps = { db, sidecar, secretKey, log };
-const queue = await startPgBossQueue(databaseUrl, syncDeps, log);
+const queue = await startPgBossQueue(databaseUrl, syncDeps, log, config.SYNC_TIMEZONE);
 await resumeInterrupted(syncDeps, queue);
 
 createApp({
