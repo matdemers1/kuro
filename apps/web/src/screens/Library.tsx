@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Poster } from '../components/Poster.js';
+import { Poster, posterFor } from '../components/Poster.js';
 import { Screen } from '../components/ui.js';
 import { api } from '../lib/api.js';
 import { navigate } from '../lib/router.js';
@@ -30,7 +30,7 @@ export function Library() {
         {visible.map((s) => (
           <li key={s.showKey}>
             <button type="button" onClick={() => { navigate(`/show/${encodeURIComponent(s.showKey)}`); }} className="flex w-full flex-col gap-1 text-left">
-              <Poster title={s.title} className="aspect-[108/152] w-full" />
+              <Poster title={s.title} src={posterFor(s.showKey)} className="aspect-[108/152] w-full" />
               <span className="text-[15px] leading-5 font-bold">{s.title}</span>
               <span className="text-[13px] text-faint capitalize">{s.status.replace('_', ' ')} · {s.watchedEpisodes}/{s.totalEpisodes}</span>
             </button>

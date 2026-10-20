@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Screen } from '../components/ui.js';
 import { api } from '../lib/api.js';
+import { navigate } from '../lib/router.js';
 import { ImportProgress } from './ImportProgress.js';
 import { CrunchyrollLink, type CrStatus } from './Settings/CrunchyrollLink.js';
 import { SyncHealth } from './Settings/SyncHealth.js';
@@ -16,6 +17,7 @@ export function You({ name, onSignOut }: { name: string; onSignOut: () => void }
       {cr?.linked === true && <SyncHealth />}
       {cr?.linked === true && <ImportProgress />}
       {cr !== undefined && <CrunchyrollLink status={cr} onLinked={setCr} />}
+      <Button kind="ghost" onClick={() => { navigate('/you/changes'); }}>Change log</Button>
       <p className="text-[13px] text-faint">Signed in as {name}.</p>
       <Button kind="ghost" onClick={onSignOut}>Sign out</Button>
     </Screen>

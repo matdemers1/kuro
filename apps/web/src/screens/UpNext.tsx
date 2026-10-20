@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PinIcon } from '../components/icons.js';
-import { Poster } from '../components/Poster.js';
+import { Poster, posterFor } from '../components/Poster.js';
 import { Screen } from '../components/ui.js';
 import { api } from '../lib/api.js';
 import { audio, hours, se } from '../lib/format.js';
@@ -31,7 +31,7 @@ export function UpNextCard({ item }: { item: UpNextItem }) {
   return (
     <article className="flex items-center gap-3 rounded-[16px] border border-line bg-surface p-3">
       <button type="button" onClick={() => { navigate(`/show/${encodeURIComponent(item.showKey)}`); }} className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-label={`${item.title}: details`}>
-        <Poster title={item.title} className="h-[104px] w-[72px] shrink-0" />
+        <Poster title={item.title} src={posterFor(item.showKey)} className="h-[104px] w-[72px] shrink-0" />
         <div className="flex min-w-0 flex-col gap-1">
           <h3 className="text-[18px] leading-6 font-bold">{item.title}</h3>
           <p className="text-[13px] text-muted">{se(item.nextSeason, item.nextEpisode)} next{item.nextAudioLocale !== null ? ` — ${audio(item.nextAudioLocale)}` : ''}</p>
