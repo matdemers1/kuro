@@ -34,10 +34,10 @@ beforeAll(async () => {
   cookie = cookieFrom(await fetch(`${h.base}/auth/login`, json({ email: 'shows@example.com', password: 'shows owner password' })), 'kuro_session') ?? '';
 
   await h.db.catalogEntry.createMany({
-    data: [entry(7001, 'Blade S1', 'TV', 3, 2019, 'SPRING'), entry(7002, 'Blade Movie: Night Train', 'MOVIE', 1, 2020, 'FALL'), entry(7003, 'Blade: Night Train Arc', 'TV', 2, 2021, 'FALL'), entry(7004, 'Blade: Final', 'TV', 2, 2024, 'SPRING'), entry(7005, 'Blade Academy', 'TV', 2, 2022, 'SPRING')],
+    data: [entry(7001, 'Blade S1', 'TV', 3, 2019, 'SPRING'), entry(7002, 'Blade Movie: Night Train', 'MOVIE', 1, 2020, 'FALL'), entry(7003, 'Blade: Night Train Arc', 'TV', 2, 2021, 'FALL'), entry(7004, 'Blade: Final', 'TV', 2, 2024, 'SPRING'), entry(7005, 'Blade Academy', 'TV', 2, 2022, 'SPRING'), entry(7006, 'Blade Movie: Castle', 'MOVIE', 1, 2025, 'SUMMER'), entry(7007, 'Blade Recap', 'SPECIAL', 1, 2020, 'WINTER')],
   });
   await h.db.anilistMedia.createMany({
-    data: [media(7001, [['SEQUEL', 7002]]), media(7002, [['PREQUEL', 7001], ['SEQUEL', 7003]]), media(7003, [['PREQUEL', 7002], ['SEQUEL', 7004], ['SPIN_OFF', 7005]]), media(7004, [['PREQUEL', 7003]]), media(7005, [['PARENT', 7003]])],
+    data: [media(7001, [['SEQUEL', 7002]]), media(7002, [['PREQUEL', 7001], ['SEQUEL', 7003]]), media(7003, [['PREQUEL', 7002], ['SEQUEL', 7004], ['SPIN_OFF', 7005]]), media(7004, [['PREQUEL', 7003], ['SEQUEL', 7006], ['SUMMARY', 7007]]), media(7005, [['PARENT', 7003]])],
   });
   const sealed = seal('rt', SECRET_KEY);
   const conn = await h.db.crConnection.create({ data: { userId, accountId: '00000000-0000-4000-8000-0000000000ef', deviceId: 'd', refreshTokenCiphertext: sealed, refreshTokenNonce: 'n' } });
@@ -68,7 +68,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await h.db.mapping.deleteMany({ where: { crSeasonId: { startsWith: 'GB' } } });
   await h.db.catalogEntry.deleteMany({ where: { releaseId: RELEASE } });
-  await h.db.anilistMedia.deleteMany({ where: { anilistId: { gte: 7001, lte: 7005 } } });
+  await h.db.anilistMedia.deleteMany({ where: { anilistId: { gte: 7001, lte: 7007 } } });
   await h.close();
 });
 
@@ -121,6 +121,23 @@ describe('Shows from matched seasons (KURO-T-2.5)', () => {
     expect(f.title).toBe('Blade');
     expect(f.shows.map((x) => [x.showKey, x.seasons, x.extras])).toEqual([[KEY, 3, 1], ['show:anilist:7005', 1, 0]]);
     expect((await fetch(`${h.base}/api/franchises/fr%3Anope`, { headers: { cookie } })).status).toBe(404);
+  });
+
+  it('the Franchise timeline puts the movie between Season 1 and Season 2, the spin-off where it aired, and the sequel movie not in the library at the end (KURO-T-5.4)', async () => {
+    const blade = await h.db.show.findUniqueOrThrow({ where: { showKey: KEY } });
+    const f = await get<{ timeline: { entryId: string; kind: string; label: string | null; showKey: string | null; watched: number | null; total: number | null }[] }>(`/api/franchises/${encodeURIComponent(blade.franchiseKey)}`);
+    expect(f.timeline.map((r) => [r.entryId, r.kind, r.label])).toEqual([
+      ['anilist:7001', 'season', 'Season 1'],
+      ['anilist:7002', 'extra', null],
+      ['anilist:7003', 'season', 'Season 2'],
+      ['anilist:7005', 'season', 'Season 1'],
+      ['anilist:7004', 'season', 'Season 3'],
+      ['anilist:7006', 'related', null],
+    ]);
+    // Where the owner stands on each part; the recap (a SUMMARY) is not on the timeline.
+    expect(f.timeline[0]).toMatchObject({ watched: 3, total: 3 });
+    expect(f.timeline[1]).toMatchObject({ watched: 0, total: 1 });
+    expect(f.timeline[5]).toMatchObject({ showKey: null, watched: null });
   });
 
   it('two rebuilds produce identical Shows (KURO-ADR-004)', async () => {

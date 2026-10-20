@@ -68,7 +68,8 @@ export function showRoutes(db: Db): Router {
       const entries = new Map((await db.catalogEntry.findMany({ where: { id: { in: inputs.show.items.map((i) => i.entryId) } }, select: { id: true, title: true, type: true, episodes: true, seasonYear: true, picture: true } })).map((e) => [e.id, e]));
       const rows = episodeList(inputs.main, inputs.plays, undefined, pref?.skipFiller ?? false);
       const watchedExtras = new Set(episodeList(inputs.extras, inputs.plays).filter((e) => e.watched).map((e) => e.crEpisodeId));
-      const franchise = await db.show.findMany({ where: { franchiseKey: (await db.show.findUnique({ where: { showKey: key } }))?.franchiseKey ?? '' }, select: { showKey: true, title: true } });
+      const franchiseKey = (await db.show.findUnique({ where: { showKey: key } }))?.franchiseKey ?? null;
+      const franchise = franchiseKey === null ? [] : await db.show.findMany({ where: { franchiseKey }, select: { showKey: true, title: true } });
       res.json({
         showKey: key,
         title: state.title,
@@ -92,6 +93,7 @@ export function showRoutes(db: Db): Router {
           return e === undefined ? [] : [{ entryId: i.entryId, kind: i.kind, required: i.required, title: e.title, type: e.type, episodes: e.episodes, year: e.seasonYear, hasPicture: e.picture !== null }];
         }),
         seriesIds: inputs.show.seriesIds,
+        franchiseKey,
         franchise: franchise.filter((f) => f.showKey !== key).map((f) => ({ showKey: f.showKey, title: f.title })),
         skipFiller: pref?.skipFiller ?? false,
         // The filler guide (KURO-T-5.3), credited when one covers the Show.

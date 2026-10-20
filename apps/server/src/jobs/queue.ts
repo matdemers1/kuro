@@ -8,6 +8,7 @@ import type { Alerts } from '../push/sender.js';
 import { checkAlerts } from './alertsCheck.js';
 import { registerCatalogImport } from './catalogImport.js';
 import { registerFillerRefresh } from './fillerRefresh.js';
+import { BACKUP_CRON, nightlyBackup } from '../backup/nightly.js';
 import type { FillerClient } from '../adapters/fillerlist.js';
 import type { CatalogSource } from '../catalog/source.js';
 import type { ScheduleClient } from '../adapters/animeschedule.js';
@@ -70,7 +71,7 @@ export async function afterSync(deps: SyncDeps, userId: string, runId: string, l
   }
 }
 
-export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts, catalog?: CatalogSource, schedule?: ScheduleClient, filler?: FillerClient): Promise<SyncQueue> {
+export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts, catalog?: CatalogSource, schedule?: ScheduleClient, filler?: FillerClient, backupDir?: string): Promise<SyncQueue> {
   const boss = new PgBoss({ connectionString: databaseUrl, schema: 'pgboss' });
   boss.on('error', (err: unknown) => {
     log.error({ err: err instanceof Error ? err.message : String(err) }, 'job queue error');
@@ -129,6 +130,19 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
     await registerCatalogImport(boss, deps.db, catalog, log, timezone, async () => {
       for (const { userId } of await deps.db.crConnection.findMany({ select: { userId: true } })) await boss.send(QUEUE, { userId, kind: 'match' } satisfies SyncJob, { singletonKey: userId });
     });
+  }
+  // Nightly backup and restore check (KURO-T-6.2), after the nightly sync has settled.
+  if (backupDir !== undefined) {
+    const BACKUP = 'nightly-backup';
+    await boss.createQueue(BACKUP, { policy: 'singleton' });
+    await boss.schedule(BACKUP, BACKUP_CRON, {}, { tz: timezone });
+    await boss.work(BACKUP, { batchSize: 1 }, async () => {
+      const out = await nightlyBackup(deps.db, { databaseUrl, backupDir, log });
+      if (out.check !== 'ok') {
+        await alerts?.send({ key: `backup:${new Date().toISOString().slice(0, 10)}`, title: 'Last night’s backup needs a look', body: out.detail.slice(0, 200), url: '/you' });
+      }
+    });
+    log.info({ cron: BACKUP_CRON, timezone, dir: backupDir }, 'nightly backup scheduled');
   }
   if (filler !== undefined) {
     await registerFillerRefresh(boss, deps.db, filler, log, timezone, async () => {

@@ -10,7 +10,11 @@ export interface Health {
   lastError: string | null;
   blockedTwice: boolean;
   pushDevices: number;
+  backup?: { at: string; file: string | null; sizeBytes: number | null; check: 'ok' | 'failed' | 'error'; detail: string | null } | null;
 }
+
+const BACKUP_DAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+const mb = (n: number) => `${(n / 1_048_576).toFixed(1)} MB`;
 
 export function useHealth(): Health | undefined {
   const [h, setH] = useState<Health>();
@@ -57,6 +61,13 @@ export function SyncHealth() {
       {row('Last sync', health.lastSuccessAt === null ? '—' : new Date(health.lastSuccessAt).toLocaleString(), health.stale ? 'text-kin' : 'text-ink')}
       {row('Next sync', 'Tonight 03:00')}
       {row('Last error', health.lastError ?? '—', health.lastError === null ? 'text-faint' : 'text-shu')}
+      {row(
+        'Backup',
+        health.backup === null || health.backup === undefined
+          ? 'Tonight 04:30'
+          : `${BACKUP_DAY.format(new Date(health.backup.at))}${health.backup.sizeBytes === null ? '' : ` · ${mb(health.backup.sizeBytes)}`} · ${health.backup.check === 'ok' ? 'restore checked' : health.backup.check === 'failed' ? `restore differed — ${health.backup.detail ?? ''}` : `failed — ${health.backup.detail ?? ''}`}`,
+        health.backup?.check === 'ok' ? 'text-ok' : health.backup === null || health.backup === undefined ? 'text-faint' : 'text-shu',
+      )}
       {row('Alerts', health.pushDevices > 0 ? `on ${String(health.pushDevices)} device${health.pushDevices === 1 ? '' : 's'}` : 'off', health.pushDevices > 0 ? 'text-ok' : 'text-faint')}
       <div className="mt-2 flex flex-wrap gap-2">
         {pushSupported() && (

@@ -8,6 +8,32 @@ import { RewatchQueue } from './RewatchQueue.js';
 import { CrunchyrollLink, type CrStatus } from './Settings/CrunchyrollLink.js';
 import { SyncHealth } from './Settings/SyncHealth.js';
 
+const EXPORTS = [
+  { href: '/api/export/kuro.json', label: 'Everything (JSON)', note: 'every play and every choice; kuro import-json reads it back' },
+  { href: '/api/export/mal.xml', label: 'MyAnimeList list (XML)', note: 'imports into MyAnimeList or AniList' },
+  { href: '/api/export/shows.csv', label: 'Shows (CSV)', note: 'one row per Show' },
+  { href: '/api/export/plays.csv', label: 'Plays (CSV)', note: 'one row per play' },
+] as const;
+
+/** Export (KURO-T-6.1): your history, yours to take. */
+function ExportLinks() {
+  return (
+    <section aria-labelledby="export" className="flex flex-col gap-2">
+      <h2 id="export" className="text-[11px] font-medium tracking-[0.6px] text-faint uppercase">Export</h2>
+      <ul className="flex flex-col gap-1">
+        {EXPORTS.map((x) => (
+          <li key={x.href}>
+            <a href={x.href} download className="flex flex-col rounded-[10px] border border-line px-3 py-2 hover:bg-raised">
+              <span className="text-[15px]">{x.label}</span>
+              <span className="text-[12px] text-faint">{x.note}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** You: sync health, the Crunchyroll link, stats, taste, the rewatch queue, and signing out. */
 export function You({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   const [cr, setCr] = useState<CrStatus>();
@@ -25,6 +51,7 @@ export function You({ name, onSignOut }: { name: string; onSignOut: () => void }
       {cr?.linked === true && <Button kind="ghost" onClick={() => { navigate('/you/stats'); }}>Stats and year in review</Button>}
       {cr?.linked === true && <Button kind="ghost" onClick={() => { navigate('/you/taste'); }}>Your taste</Button>}
       <Button kind="ghost" onClick={() => { navigate('/you/changes'); }}>Change log</Button>
+      {cr?.linked === true && <ExportLinks />}
       <p className="text-[13px] text-faint">Signed in as {name}.</p>
       <Button kind="ghost" onClick={onSignOut}>Sign out</Button>
       <p className="text-[12px] text-faint">
