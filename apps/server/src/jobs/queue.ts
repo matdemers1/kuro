@@ -3,6 +3,7 @@ import type { Logger } from '../logger.js';
 import { resolveCatalog, resolveMarkers } from '../cr/resolve.js';
 import { rebuildShows } from '../derive/rebuild.js';
 import { matchCatalog } from '../match/run.js';
+import { importLists } from '../cr/lists.js';
 import type { Alerts } from '../push/sender.js';
 import { checkAlerts } from './alertsCheck.js';
 import { registerCatalogImport } from './catalogImport.js';
@@ -41,6 +42,9 @@ interface SyncJob {
  * episode — thousands after a first import — and markers only refine what counts as watched.
  */
 export async function afterSync(deps: SyncDeps, userId: string, runId: string, log: Logger): Promise<void> {
+  await importLists(deps, userId).catch((err: unknown) => {
+    log.warn({ err: err instanceof Error ? err.message : String(err) }, 'watchlist import failed; it retries after the next sync');
+  });
   await resolveCatalog(deps, userId).catch((err: unknown) => {
     log.warn({ err: err instanceof Error ? err.message : String(err) }, 'catalog resolve failed; it retries after the next sync');
   });

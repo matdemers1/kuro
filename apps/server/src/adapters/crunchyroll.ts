@@ -23,6 +23,12 @@ const Failure = z.object({ error: z.enum(['expired', 'blocked', 'upstream', 'bad
 
 const Cms = z.object({ refreshToken: z.string().min(1), body: z.record(z.string(), z.unknown()) });
 const Skip = z.object({ events: z.record(z.string(), z.unknown()).nullable() });
+const Lists = z.object({
+  refreshToken: z.string().min(1),
+  watchlist: z.array(z.record(z.string(), z.unknown())),
+  crunchylists: z.array(z.object({ id: z.string(), title: z.string().nullable(), items: z.array(z.record(z.string(), z.unknown())) })),
+});
+export type CrLists = z.infer<typeof Lists>;
 
 export type LinkResult = z.infer<typeof Linked>;
 export type HistoryPage = z.infer<typeof Page>;
@@ -65,6 +71,11 @@ export class CrSidecar {
   /** Crunchyroll's public intro/credits markers, or null when none are published. */
   async skipEvents(episodeId: string): Promise<Record<string, unknown> | null> {
     return (await this.post('/skip-events', { episodeId }, Skip)).events;
+  }
+
+  /** The watchlist and every Crunchylist (KURO-T-3.5). */
+  lists(input: { refreshToken: string; deviceId: string; accountId: string }): Promise<CrLists> {
+    return this.post('/lists', input, Lists);
   }
 
   historyPage(input: { refreshToken: string; deviceId: string; accountId: string; page: number; pageSize?: number }): Promise<HistoryPage> {

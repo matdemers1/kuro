@@ -52,6 +52,15 @@ pub struct HistoryPage {
     pub items: Vec<Value>,
 }
 
+/// The owner's watchlist and Crunchylists (KURO-T-3.5), as Crunchyroll returned them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lists {
+    pub refresh_token: String,
+    pub watchlist: Vec<Value>,
+    /// Each list as `{ id, title, items }`.
+    pub crunchylists: Vec<Value>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CmsResult {
     pub refresh_token: String,
@@ -85,6 +94,25 @@ pub trait Cr: Send + Sync + 'static {
         page: u32,
         page_size: u32,
     ) -> impl Future<Output = Result<HistoryPage, CrError>> + Send;
+    /// The watchlist and every Crunchylist, read-only.
+    fn lists(
+        &self,
+        refresh_token: String,
+        device_id: String,
+        account_id: String,
+    ) -> impl Future<Output = Result<Lists, CrError>> + Send;
+}
+
+/// A Crunchylist id: letters, digits and dashes, before it goes into a URL.
+pub fn is_list_id(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+fn data_of(body: &Value) -> Vec<Value> {
+    body.get("data")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn device(device_id: String) -> DeviceIdentifier {
@@ -251,6 +279,55 @@ impl Cr for LiveCr {
             refresh_token: refresh_token_of(&cr).await?,
             total,
             items,
+        })
+    }
+
+    async fn lists(
+        &self,
+        refresh_token: String,
+        device_id: String,
+        account_id: String,
+    ) -> Result<Lists, CrError> {
+        let cr = Crunchyroll::builder()
+            .login_with_refresh_token(refresh_token, device(device_id))
+            .await?;
+        let locale = ("locale", "en-US".to_string());
+        let watchlist = get_json(
+            &cr,
+            format!("https://www.crunchyroll.com/content/v2/discover/{account_id}/watchlist"),
+            &[locale.clone(), ("n", "1000".to_string())],
+        )
+        .await?;
+        let previews = get_json(
+            &cr,
+            format!("https://www.crunchyroll.com/content/v2/{account_id}/custom-lists"),
+            std::slice::from_ref(&locale),
+        )
+        .await?;
+        let mut crunchylists = Vec::new();
+        for preview in data_of(&previews) {
+            let Some(id) = preview.get("list_id").and_then(Value::as_str) else {
+                continue;
+            };
+            if !is_list_id(id) {
+                continue;
+            }
+            let list = get_json(
+                &cr,
+                format!("https://www.crunchyroll.com/content/v2/{account_id}/custom-lists/{id}"),
+                std::slice::from_ref(&locale),
+            )
+            .await?;
+            crunchylists.push(serde_json::json!({
+                "id": id,
+                "title": preview.get("title").cloned().unwrap_or(Value::Null),
+                "items": data_of(&list),
+            }));
+        }
+        Ok(Lists {
+            refresh_token: refresh_token_of(&cr).await?,
+            watchlist: data_of(&watchlist),
+            crunchylists,
         })
     }
 }

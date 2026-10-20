@@ -22,6 +22,8 @@ export interface ShowInputs {
   readonly description: string | null;
   /** The last Season is still airing, or a sequel is announced (KURO-T-2.7). */
   readonly moreComing: boolean;
+  /** On the watchlist or a Crunchylist (KURO-T-3.5): with nothing watched, Plan to watch. */
+  readonly plannedAt: Date | null;
 }
 
 /** Everything derivation needs, grouped into Shows. `only` narrows to one Show (the detail page). */
@@ -32,6 +34,8 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
   });
   const bySeries = new Map<string, PlayIn[]>();
   for (const p of plays) bySeries.set(p.crParentId, [...(bySeries.get(p.crParentId) ?? []), p]);
+  const plannedAt = new Map<string, Date>();
+  for (const p of await db.planEntry.findMany()) if (!plannedAt.has(p.crSeriesId) || (plannedAt.get(p.crSeriesId) ?? p.syncedAt) > p.syncedAt) plannedAt.set(p.crSeriesId, p.syncedAt);
 
   // Every resolved series, watched or not: one Crunchyroll split off a show (a Final Season) joins
   // its Show even before the owner starts it. Only Shows with something watched are kept.
@@ -81,7 +85,7 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
   const out: ShowInputs[] = [];
   for (const show of grouping.shows) {
     if (only !== undefined && show.key !== only) continue;
-    if (!show.seriesIds.some((id) => bySeries.has(id))) continue;
+    if (!show.seriesIds.some((id) => bySeries.has(id) || plannedAt.has(id))) continue;
     const position = new Map(show.items.map((i) => [i.entryId, i.position]));
     const matched = show.key.startsWith('show:');
     const main: EpisodeIn[] = [];
@@ -142,6 +146,7 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
       plays: show.seriesIds.flatMap((id) => bySeries.get(id) ?? []),
       description: members[0]?.description ?? null,
       moreComing,
+      plannedAt: show.seriesIds.map((id) => plannedAt.get(id)).find((d) => d !== undefined) ?? null,
     });
   }
   return out;
@@ -151,10 +156,11 @@ export async function rebuildShows(db: Db, userId: string, now = new Date(), fal
   const inputs = await loadShows(db, userId);
   const prefs = await db.showPreference.findMany();
   const manualOf = new Map(prefs.flatMap((p) => (p.status === 'plan_to_watch' || p.status === 'dropped' ? [[p.showKey, { status: p.status, at: p.statusAt ?? p.updatedAt }] as const] : [])));
-  const states = inputs.map(({ show, main, plays, moreComing }) => ({
+  const states = inputs.map(({ show, main, plays, moreComing, plannedAt }) => ({
     showKey: show.key,
     title: show.title,
-    ...deriveShow(main, plays, now, fallbackLocale, { moreComing, manual: manualOf.get(show.key) ?? null }),
+    // The owner's own status first; a show on a Crunchyroll list is planned until watched.
+    ...deriveShow(main, plays, now, fallbackLocale, { moreComing, manual: manualOf.get(show.key) ?? (plannedAt === null ? null : { status: 'plan_to_watch', at: plannedAt }) }),
     derivedAt: now,
   }));
 

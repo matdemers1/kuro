@@ -147,6 +147,34 @@ async fn cms<C: Cr>(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListsBody {
+    pub refresh_token: String,
+    pub device_id: String,
+    pub account_id: String,
+}
+
+/// The watchlist and Crunchylists (KURO-T-3.5): read-only, like everything the sidecar does.
+async fn lists<C: Cr>(
+    State(cr): State<Arc<C>>,
+    Json(body): Json<ListsBody>,
+) -> Result<impl IntoResponse, CrError> {
+    non_empty(&[
+        ("refreshToken", &body.refresh_token),
+        ("deviceId", &body.device_id),
+        ("accountId", &body.account_id),
+    ])?;
+    let lists = cr
+        .lists(body.refresh_token, body.device_id, body.account_id)
+        .await?;
+    Ok(Json(json!({
+        "refreshToken": lists.refresh_token,
+        "watchlist": lists.watchlist,
+        "crunchylists": lists.crunchylists,
+    })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SkipBody {
     pub episode_id: String,
 }
@@ -170,6 +198,7 @@ pub fn router<C: Cr>(cr: Arc<C>) -> Router {
         .route("/history", post(history::<C>))
         .route("/cms", post(cms::<C>))
         .route("/skip-events", post(skip_events::<C>))
+        .route("/lists", post(lists::<C>))
         .with_state(cr)
 }
 
@@ -178,7 +207,7 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::Request;
-    use cr::{HistoryPage, Linked};
+    use cr::{HistoryPage, Linked, Lists};
     use http_body_util::BodyExt;
     use serde_json::Value;
     use tower::ServiceExt;
@@ -233,6 +262,13 @@ mod tests {
                     items: vec![json!({ "id": format!("EP{page}") })],
                 }),
             }
+        }
+        async fn lists(&self, rt: String, _d: String, _a: String) -> Result<Lists, CrError> {
+            Ok(Lists {
+                refresh_token: format!("{rt}-rotated"),
+                watchlist: vec![json!({ "panel": { "id": "GSERIES1", "type": "series" } })],
+                crunchylists: vec![json!({ "id": "list-1", "title": "Later", "items": [] })],
+            })
         }
     }
 
@@ -297,6 +333,32 @@ mod tests {
         assert_eq!(body["refreshToken"], "rt-rotated");
         assert_eq!(body["total"], 250);
         assert_eq!(body["items"][0]["id"], "EP3");
+    }
+
+    #[tokio::test]
+    async fn lists_returns_the_watchlist_and_crunchylists_with_the_rotated_token() {
+        let (status, body) = call(
+            "/lists",
+            json!({ "refreshToken": "rt", "deviceId": "d", "accountId": "a" }),
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(body["refreshToken"], "rt-rotated");
+        assert_eq!(body["watchlist"][0]["panel"]["id"], "GSERIES1");
+        assert_eq!(body["crunchylists"][0]["title"], "Later");
+        let (missing, _) = call(
+            "/lists",
+            json!({ "refreshToken": "rt", "deviceId": "d", "accountId": "" }),
+        )
+        .await;
+        assert_eq!(missing, 400);
+    }
+
+    #[test]
+    fn list_ids_are_checked_before_they_reach_a_url() {
+        assert!(cr::is_list_id("6f1d2c3b-aaaa-4bbb-8ccc-0123456789ab"));
+        assert!(!cr::is_list_id("../accounts"));
+        assert!(!cr::is_list_id(""));
     }
 
     #[tokio::test]

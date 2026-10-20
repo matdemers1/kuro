@@ -533,3 +533,16 @@ model Override {
 
   @@map("override")
 }
+
+/// A series on the owner's Crunchyroll watchlist or a Crunchylist (KURO-T-3.5): a snapshot, replaced
+/// on every sync. A series here with nothing watched is a Show with status Plan to watch.
+model PlanEntry {
+  crSeriesId String   @map("cr_series_id")
+  /// watchlist, or crunchylist:<list id>.
+  source     String
+  listTitle  String?  @map("list_title")
+  syncedAt   DateTime @map("synced_at") @db.Timestamptz(6)
+
+  @@id([crSeriesId, source])
+  @@map("plan_entry")
+}
