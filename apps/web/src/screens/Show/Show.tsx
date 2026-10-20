@@ -7,6 +7,7 @@ import { audio, hours, se, statusLabel } from '../../lib/format.js';
 import { navigate } from '../../lib/router.js';
 import { GroupingEditor } from '../GroupingEditor/GroupingEditor.js';
 import { DROP_REASON, DropChooser, NoteBox, RatingRow, SeasonScore } from './Taste.js';
+import { AddToRewatch } from '../RewatchQueue.js';
 
 interface Episode {
   crEpisodeId: string;
@@ -32,6 +33,8 @@ interface ShowDetail {
   rating?: number | null;
   seasonRatings?: Record<string, number>;
   note?: string | null;
+  rewatches?: { startedAt: string; endedAt: string | null }[];
+  inRewatchQueue?: boolean;
   pinned: boolean;
   watchedEpisodes: number;
   totalEpisodes: number;
@@ -182,6 +185,18 @@ export function Show({ showKey }: { showKey: string }) {
               ))}
             </ol>
           </section>
+        )}
+        {(show.rewatches?.length ?? 0) > 0 && (
+          <p className="text-[13px] text-faint">
+            Rewatched {show.rewatches?.filter((r) => r.endedAt !== null).length ?? 0}×{show.rewatches?.some((r) => r.endedAt === null) === true ? ' · rewatching now' : ''}
+          </p>
+        )}
+        {show.inRewatchQueue === true ? (
+          <button type="button" onClick={() => { navigate('/you'); }} className="self-start text-[13px] text-kin">In your rewatch queue →</button>
+        ) : (
+          (show.status === 'completed' || show.status === 'caught_up' || show.status === 'paused') && (
+            <AddToRewatch showKey={show.showKey} seasons={(show.items ?? []).filter((i) => i.kind === 'season').map((i) => ({ entryId: i.entryId, title: i.title }))} onAdded={() => { setReload((n) => n + 1); }} />
+          )
         )}
         <RatingRow label="Your rating" score={show.rating ?? null} onRate={(score) => { rate('/rating', score, (cur) => ({ ...cur, rating: score })); }} />
         <NoteBox key={show.showKey} showKey={show.showKey} initial={show.note ?? null} />

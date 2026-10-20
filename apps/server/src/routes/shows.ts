@@ -78,6 +78,8 @@ export function showRoutes(db: Db): Router {
         rating: (await db.rating.findUnique({ where: { target: `show:${key}` } }))?.score ?? null,
         seasonRatings: Object.fromEntries((await db.rating.findMany({ where: { target: { in: inputs.show.items.map((i) => `season:${i.entryId}`) } } })).map((r) => [r.target.slice('season:'.length), r.score])),
         note: (await db.showNote.findUnique({ where: { showKey: key } }))?.text ?? null,
+        rewatches: (await db.rewatch.findMany({ where: { showKey: key }, orderBy: { startedAt: 'asc' } })).map((r) => ({ startedAt: r.startedAt.toISOString(), endedAt: r.endedAt?.toISOString() ?? null })),
+        inRewatchQueue: (await db.rewatchQueueItem.findUnique({ where: { showKey: key } })) !== null,
         pinned: pref?.pinned ?? false,
         watchedEpisodes: state.watchedEpisodes,
         totalEpisodes: state.totalEpisodes,

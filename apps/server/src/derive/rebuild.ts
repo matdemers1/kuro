@@ -165,14 +165,12 @@ export async function rebuildShows(db: Db, userId: string, now = new Date(), fal
   const inputs = await loadShows(db, userId);
   const prefs = await db.showPreference.findMany();
   const manualOf = new Map(prefs.flatMap((p) => (p.status === 'plan_to_watch' || p.status === 'dropped' ? [[p.showKey, { status: p.status, at: p.statusAt ?? p.updatedAt }] as const] : [])));
-  const states = inputs.map(({ show, main, plays, moreComing, comingEntryId, plannedAt }) => ({
-    showKey: show.key,
-    title: show.title,
-    comingEntryId,
+  const derived = inputs.map(({ show, main, plays, moreComing, comingEntryId, plannedAt }) => {
     // The owner's own status first; a show on a Crunchyroll list is planned until watched.
-    ...deriveShow(main, plays, now, fallbackLocale, { moreComing, manual: manualOf.get(show.key) ?? (plannedAt === null ? null : { status: 'plan_to_watch', at: plannedAt }) }),
-    derivedAt: now,
-  }));
+    const { rewatches, ...out } = deriveShow(main, plays, now, fallbackLocale, { moreComing, manual: manualOf.get(show.key) ?? (plannedAt === null ? null : { status: 'plan_to_watch', at: plannedAt }) });
+    return { state: { showKey: show.key, title: show.title, comingEntryId, ...out, derivedAt: now }, rewatches: rewatches.map((r) => ({ showKey: show.key, ...r })) };
+  });
+  const states = derived.map((d) => d.state);
 
   // A pin made while a Show was still its Crunchyroll series follows it into the matched Show.
   const pinned = new Set(prefs.filter((p) => p.pinned).map((p) => p.showKey));
@@ -182,9 +180,11 @@ export async function rebuildShows(db: Db, userId: string, now = new Date(), fal
     db.showItem.deleteMany({}),
     db.show.deleteMany({}),
     db.showState.deleteMany({}),
+    db.rewatch.deleteMany({}),
     db.show.createMany({ data: inputs.map(({ show }) => ({ showKey: show.key, title: show.title, franchiseKey: show.franchiseKey, seriesIds: [...show.seriesIds], derivedAt: now })) }),
     db.showItem.createMany({ data: inputs.flatMap(({ show }) => show.items.map((i) => ({ showKey: show.key, position: i.position, catalogEntryId: i.entryId, kind: i.kind, required: i.required }))) }),
     db.showState.createMany({ data: states }),
+    db.rewatch.createMany({ data: derived.flatMap((d) => d.rewatches), skipDuplicates: true }),
     ...carried.map((showKey) => db.showPreference.upsert({ where: { showKey }, create: { showKey, pinned: true }, update: { pinned: true } })),
   ]);
   return states.length;

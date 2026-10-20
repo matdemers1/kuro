@@ -149,3 +149,22 @@ describe('a new season brings a finished Show back (KURO-T-3.3)', () => {
     expect(upNext([{ showKey: 'cr:BACK', status: back.status, pinned: false, nextIsNew: back.nextIsNew, nextIsNewSeason: back.nextIsNewSeason, lastPlayedAt: back.lastPlayedAt, nextCrEpisodeId: back.nextCrEpisodeId }])).toEqual([{ showKey: 'cr:BACK', group: 'next_season' }]);
   });
 });
+
+describe('rewatches (KURO-T-4.2)', () => {
+  const eps = () => show(1, 3).filter((e) => e.audioLocale === 'en-US');
+  const first = [play('EN11', 100), play('EN12', 99), play('EN13', 98)];
+
+  it('a replay of a fully watched episode after the end opens a rewatch; the last episode closes it', () => {
+    const open = deriveShow(eps(), [...first, play('EN11', 10)], NOW);
+    expect(open.rewatches).toEqual([{ startedAt: ago(10), endedAt: null }]);
+    const closed = deriveShow(eps(), [...first, play('EN11', 10), play('EN12', 9), play('EN13', 8)], NOW);
+    expect(closed.rewatches).toEqual([{ startedAt: ago(10), endedAt: ago(8) }]);
+    expect(closed.status).toBe('completed');
+  });
+
+  it('replaying before ever finishing is not a rewatch, and a second pass is a second rewatch', () => {
+    expect(deriveShow(eps(), [play('EN11', 100), play('EN11', 50)], NOW).rewatches).toEqual([]);
+    const twice = deriveShow(eps(), [...first, play('EN11', 20), play('EN13', 19), play('EN12', 5)], NOW);
+    expect(twice.rewatches.map((r) => r.endedAt === null)).toEqual([false, true]);
+  });
+});
