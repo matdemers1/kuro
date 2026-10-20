@@ -54,9 +54,12 @@ export function UpNextCard({ item }: { item: UpNextItem }) {
 export function UpNext() {
   const [cr, setCr] = useState<CrStatus>();
   const [items, setItems] = useState<UpNextItem[]>();
+  const loadItems = () => {
+    void api<{ items: UpNextItem[] }>('/api/up-next').then((r) => { setItems(r.items); }, () => { setItems([]); });
+  };
   useEffect(() => {
     void api<CrStatus>('/api/crunchyroll').then(setCr, () => { setCr({ linked: false }); });
-    void api<{ items: UpNextItem[] }>('/api/up-next').then((r) => { setItems(r.items); }, () => { setItems([]); });
+    loadItems();
   }, []);
 
   const health = useHealth();
@@ -66,7 +69,7 @@ export function UpNext() {
     <Screen kicker="Tonight" title="Up Next">
       <SyncBanner health={health} />
       {cr !== undefined && !cr.linked && <CrunchyrollLink status={cr} onLinked={setCr} />}
-      {cr?.linked === true && (items?.length ?? 0) === 0 && <ImportProgress />}
+      {cr?.linked === true && (items?.length ?? 0) === 0 && <ImportProgress onDerived={loadItems} />}
       {items === undefined && cr?.linked === true && <div aria-busy="true" className="h-32 animate-pulse rounded-[16px] bg-raised" />}
       {items !== undefined && items.length === 0 && cr?.linked === true && (
         <div className="flex flex-col items-center gap-2 py-10 text-center">

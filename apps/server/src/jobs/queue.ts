@@ -46,6 +46,7 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
         log.warn({ err: err instanceof Error ? err.message : String(err) }, 'catalog resolve failed; it retries after the next sync');
       });
       const shows = await rebuildShows(deps.db, job.data.userId);
+      await deps.db.syncRun.update({ where: { id: outcome.runId }, data: { derivedAt: new Date() } });
       log.info({ shows }, 'derived state rebuilt');
     }
   });
