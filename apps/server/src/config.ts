@@ -35,6 +35,9 @@ const Env = z.object({
   VAPID_SUBJECT: z.string().default('mailto:owner@kuro.invalid'),
   /** The anime-offline-database continuation the catalog imports from (KURO-REQ-025). */
   KURO_CATALOG_REPO: z.string().regex(/^[\w.-]+\/[\w.-]+$/).default('cedya77/anime-offline-database'),
+  /** AnimeSchedule.net's application token (KURO-T-3.1): the week's dub timetable. Without it, This
+   * Season shows what the owner's Crunchyroll shows released. */
+  ANIMESCHEDULE_TOKEN: z.string().min(1).optional(),
   D3AUTH_ISSUER: z.url().optional(),
   D3AUTH_CLIENT_ID: z.string().min(1).optional(),
   D3AUTH_CLIENT_SECRET: z.string().min(1).optional(),

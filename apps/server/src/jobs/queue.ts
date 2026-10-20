@@ -8,6 +8,8 @@ import type { Alerts } from '../push/sender.js';
 import { checkAlerts } from './alertsCheck.js';
 import { registerCatalogImport } from './catalogImport.js';
 import type { CatalogSource } from '../catalog/source.js';
+import type { ScheduleClient } from '../adapters/animeschedule.js';
+import { refreshSchedule, SCHEDULE_CRON, weekKey } from '../schedule/refresh.js';
 import { runSync, type SyncDeps, type SyncKind } from '../sync/run.js';
 
 /**
@@ -66,7 +68,7 @@ export async function afterSync(deps: SyncDeps, userId: string, runId: string, l
   }
 }
 
-export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts, catalog?: CatalogSource): Promise<SyncQueue> {
+export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts, catalog?: CatalogSource, schedule?: ScheduleClient): Promise<SyncQueue> {
   const boss = new PgBoss({ connectionString: databaseUrl, schema: 'pgboss' });
   boss.on('error', (err: unknown) => {
     log.error({ err: err instanceof Error ? err.message : String(err) }, 'job queue error');
@@ -107,6 +109,18 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
     await boss.work(ALERTS, { batchSize: 1 }, async () => {
       await checkAlerts(deps.db, alerts);
     });
+  }
+  // Daily: the week's dub and sub timetables, when AnimeSchedule is configured (KURO-T-3.1).
+  if (schedule !== undefined) {
+    const SCHEDULE = 'schedule-refresh';
+    await boss.createQueue(SCHEDULE, { policy: 'singleton' });
+    await boss.schedule(SCHEDULE, SCHEDULE_CRON, {}, { tz: timezone });
+    await boss.work(SCHEDULE, { batchSize: 1 }, async () => {
+      await refreshSchedule(deps.db, schedule, timezone, log).catch((err: unknown) => {
+        log.warn({ err: err instanceof Error ? err.message : String(err) }, 'schedule refresh failed; it retries tomorrow');
+      });
+    });
+    if ((await deps.db.scheduleEntry.count({ where: { week: weekKey(new Date()) } })) === 0) await boss.send(SCHEDULE, {}, { singletonKey: 'boot' });
   }
   if (catalog !== undefined) {
     // A new catalog release can retire entries and add better ones: match again after each import.

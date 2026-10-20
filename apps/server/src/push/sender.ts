@@ -51,6 +51,11 @@ export class Alerts {
     private readonly log: Logger,
   ) {}
 
+  /** Record a key as seen without notifying: the state of things when an alert kind first runs. */
+  async remember(alert: AlertInput): Promise<void> {
+    await this.db.alert.createMany({ data: [{ key: alert.key, title: alert.title, body: alert.body, url: alert.url ?? null }], skipDuplicates: true });
+  }
+
   /** Send once. Returns false when the key was already sent (or there is no transport). */
   async send(alert: AlertInput): Promise<boolean> {
     // Claim the key first: two racing checks cannot both send.
