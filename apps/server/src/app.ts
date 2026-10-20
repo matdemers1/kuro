@@ -6,6 +6,7 @@ import type { Logger } from './logger.js';
 import { authRoutes } from './routes/auth.js';
 import { oidcRoutes } from './routes/oidc.js';
 import { setupRoutes } from './routes/setup.js';
+import { schemaRevision } from './boot.js';
 
 export interface AppDeps {
   readonly version: string;
@@ -19,6 +20,7 @@ export interface AppDeps {
     readonly oidc: OidcClient | null;
     readonly log: Logger;
     readonly setupToken?: string | undefined;
+    readonly sidecarUrl?: string | undefined;
   };
 }
 
@@ -27,9 +29,26 @@ export function createApp(deps: AppDeps): Express {
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
 
-  // Shipyard and Docker's HEALTHCHECK read this. KURO-T-0.7 adds the database and sidecar.
+  // Liveness: the process is up. Docker's HEALTHCHECK reads this.
   app.get('/healthz', (_req, res) => {
     res.json({ ok: true, version: deps.version });
+  });
+
+  // What Shipyard's manifest checks after a deploy: the schema revision, the database and the
+  // sidecar. 503 when either dependency is down, so a broken release fails its soak.
+  app.get('/health', (_req, res, next) => {
+    if (deps.core === undefined) {
+      res.json({ ok: true, version: deps.version, schemaRevision: null, database: 'absent', sidecar: 'absent' });
+      return;
+    }
+    const { db, sidecarUrl } = deps.core;
+    void (async () => {
+      const schema = await schemaRevision(db);
+      const sidecar = sidecarUrl === undefined ? 'absent' : await fetch(new URL('/healthz', sidecarUrl), { signal: AbortSignal.timeout(3000) }).then((r) => (r.ok ? 'up' : 'down'), () => 'down');
+      const database = schema === null ? 'down' : 'up';
+      const ok = database === 'up' && sidecar !== 'down';
+      res.status(ok ? 200 : 503).json({ ok, version: deps.version, schemaRevision: schema, database, sidecar });
+    })().catch(next);
   });
 
   if (deps.core !== undefined) {

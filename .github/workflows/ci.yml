@@ -150,13 +150,21 @@ jobs:
             context: crates/kuro-cr
             file: crates/kuro-cr/Dockerfile
     steps:
+      # fetch-depth 0 so the trailer parse sees HEAD's own log entry.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Shipyard reads these off the image: `migration` decides whether a failed deploy may be
+      # auto-rolled back (a `contract` release never is), `schema` is what /health must report.
+      - id: shipyard-labels
+        name: Shipyard labels from the HEAD commit's trailer
+        run: bash scripts/shipyard-labels.sh | tee -a "$GITHUB_OUTPUT"
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
@@ -164,6 +172,10 @@ jobs:
           tags: |
             type=sha,format=long
             type=raw,value=latest
+          labels: |
+            dev.d3cloud.shipyard.migration=${{ steps.shipyard-labels.outputs.migration }}
+            dev.d3cloud.shipyard.schema=${{ steps.shipyard-labels.outputs.schema }}
+            dev.d3cloud.shipyard.env=BASE_URL,DATABASE_URL,KURO_SECRET_KEY,AUTH_PEPPER
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: ${{ matrix.context }}

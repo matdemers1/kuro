@@ -1,0 +1,39 @@
+# Shipyard manifest for Kurō. The copy that counts lives on the host at /DATA/shipyard/apps/kuro.yml.
+name: kuro
+repo: matdemers1/kuro
+workflow: ci.yml
+compose:
+  files:
+    - /DATA/kuro/compose.yml
+    - /DATA/kuro/compose.tunnel.yml
+  project: kuro
+services:
+  kuro-server:
+    image: ghcr.io/matdemers1/kuro-server
+  kuro-cr:
+    image: ghcr.io/matdemers1/kuro-cr
+# The server migrates itself on boot after a pre-migration dump; /health reports schemaRevision
+# and 503s when the database or the sidecar is down.
+health:
+  service: kuro-server
+  port: 3300
+  path: /health
+soakSeconds: 60
+steps:
+  backup:
+    service: kuro-server
+    argv: [node, dist/cli/backup.js]
+    artifactsDir: /var/lib/docker/volumes/kuro_backups/_data
+  restore:
+    service: kuro-server
+    argv: [node, dist/cli/restore.js, --file, "/data/backups/{artifact}", --yes]
+requiredEnv:
+  - BASE_URL
+  - DATABASE_URL
+  - KURO_SECRET_KEY
+  - AUTH_PEPPER
+envFiles:
+  - /DATA/kuro/server.env
+foreman:
+  project: KURO
+  environment: production
