@@ -18,6 +18,24 @@ const UNDOABLE: Record<string, (db: Db, entityId: string, before: Record<string,
     await db.showPreference.upsert({ where: { showKey }, create: { showKey, pinned }, update: { pinned } });
     return 'ok';
   },
+  /** A rating, back to its earlier score (or none), if it was not changed since. */
+  async rating(db, target, before, after) {
+    const now = await db.rating.findUnique({ where: { target } });
+    if ((now?.score ?? null) !== (after['score'] ?? null)) return 'moved_on';
+    const score = typeof before['score'] === 'number' ? before['score'] : null;
+    if (score === null) await db.rating.deleteMany({ where: { target } });
+    else await db.rating.upsert({ where: { target }, create: { target, score }, update: { score } });
+    return 'ok';
+  },
+  /** A note, back to its earlier text (or none), if it was not edited since. */
+  async show_note(db, showKey, before, after) {
+    const now = await db.showNote.findUnique({ where: { showKey } });
+    if ((now?.text ?? null) !== (after['text'] ?? null)) return 'moved_on';
+    const text = typeof before['text'] === 'string' ? before['text'] : null;
+    if (text === null) await db.showNote.deleteMany({ where: { showKey } });
+    else await db.showNote.upsert({ where: { showKey }, create: { showKey, text }, update: { text } });
+    return 'ok';
+  },
   /** A grouping override, added or taken back: undo does the opposite, if nothing changed since. */
   async override(db, id, before, after) {
     const now = await db.override.findUnique({ where: { id } });
@@ -32,7 +50,8 @@ const UNDOABLE: Record<string, (db: Db, entityId: string, before: Record<string,
     if ((now?.status ?? null) !== after['status']) return 'moved_on';
     const status = (before['status'] as string | null | undefined) ?? null;
     const at = typeof before['statusAt'] === 'string' ? new Date(before['statusAt']) : null;
-    await db.showPreference.upsert({ where: { showKey }, create: { showKey, status, statusAt: at }, update: { status, statusAt: at } });
+    const dropReason = typeof before['dropReason'] === 'string' ? before['dropReason'] : null;
+    await db.showPreference.upsert({ where: { showKey }, create: { showKey, status, statusAt: at, dropReason }, update: { status, statusAt: at, dropReason } });
     return 'ok';
   },
   /** A review-queue answer: the season's mappings go back to what they were, if nothing changed since. */
