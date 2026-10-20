@@ -33,6 +33,8 @@ const Env = z.object({
   VAPID_PUBLIC_KEY: z.string().min(1).optional(),
   VAPID_PRIVATE_KEY: z.string().min(1).optional(),
   VAPID_SUBJECT: z.string().default('mailto:owner@kuro.invalid'),
+  /** The anime-offline-database continuation the catalog imports from (KURO-REQ-025). */
+  KURO_CATALOG_REPO: z.string().regex(/^[\w.-]+\/[\w.-]+$/).default('cedya77/anime-offline-database'),
   D3AUTH_ISSUER: z.url().optional(),
   D3AUTH_CLIENT_ID: z.string().min(1).optional(),
   D3AUTH_CLIENT_SECRET: z.string().min(1).optional(),

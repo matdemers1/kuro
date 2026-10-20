@@ -1,9 +1,10 @@
+import { catalogImport } from './catalogImport.js';
 import { seedDev } from './seedDev.js';
 import { spike } from './spike.js';
 import { vapidKeys } from './vapidKeys.js';
 
 /** `kuro <command>` — operator commands, run inside the server image or with tsx. */
-const commands: Record<string, () => Promise<number>> = { spike: () => spike(), 'seed-dev': () => seedDev(), 'vapid-keys': () => Promise.resolve(vapidKeys()) };
+const commands: Record<string, () => Promise<number>> = { spike: () => spike(), 'catalog-import': () => catalogImport(process.argv.slice(3)), 'seed-dev': () => seedDev(), 'vapid-keys': () => Promise.resolve(vapidKeys()) };
 
 const name = process.argv[2] ?? '';
 const command = commands[name];

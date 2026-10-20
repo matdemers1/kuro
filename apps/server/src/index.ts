@@ -23,7 +23,7 @@ const transport =
     ? vapidTransport({ publicKey: config.VAPID_PUBLIC_KEY, privateKey: config.VAPID_PRIVATE_KEY, subject: config.VAPID_SUBJECT }, log)
     : null;
 const alerts = new Alerts(db, transport, log);
-const queue = await startPgBossQueue(databaseUrl, syncDeps, log, config.SYNC_TIMEZONE, alerts);
+const queue = await startPgBossQueue(databaseUrl, syncDeps, log, config.SYNC_TIMEZONE, alerts, { repo: config.KURO_CATALOG_REPO });
 await resumeInterrupted(syncDeps, queue);
 
 createApp({

@@ -4,6 +4,8 @@ import { resolveCatalog } from '../cr/resolve.js';
 import { rebuildShows } from '../derive/rebuild.js';
 import type { Alerts } from '../push/sender.js';
 import { checkAlerts } from './alertsCheck.js';
+import { registerCatalogImport } from './catalogImport.js';
+import type { CatalogSource } from '../catalog/source.js';
 import { runSync, type SyncDeps, type SyncKind } from '../sync/run.js';
 
 /**
@@ -28,7 +30,7 @@ interface SyncJob {
   kind: SyncKind;
 }
 
-export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts): Promise<SyncQueue> {
+export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts, catalog?: CatalogSource): Promise<SyncQueue> {
   const boss = new PgBoss({ connectionString: databaseUrl, schema: 'pgboss' });
   boss.on('error', (err: unknown) => {
     log.error({ err: err instanceof Error ? err.message : String(err) }, 'job queue error');
@@ -67,6 +69,7 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
       await checkAlerts(deps.db, alerts);
     });
   }
+  if (catalog !== undefined) await registerCatalogImport(boss, deps.db, catalog, log, timezone);
   return {
     async request(userId, kind) {
       await boss.send(QUEUE, { userId, kind } satisfies SyncJob, { singletonKey: userId, retryLimit: 0 });
