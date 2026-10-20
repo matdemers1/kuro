@@ -14,6 +14,9 @@ import { upNextRoutes } from './routes/upNext.js';
 import { showRoutes } from './routes/shows.js';
 import { healthPanelRoutes, pushRoutes } from './routes/push.js';
 import { Alerts } from './push/sender.js';
+import { ImageCache } from './images/cache.js';
+import { imageRoutes } from './routes/images.js';
+import { changeRoutes } from './routes/changes.js';
 import type { SyncQueue } from './jobs/queue.js';
 
 export interface AppDeps {
@@ -33,6 +36,7 @@ export interface AppDeps {
     readonly queue?: SyncQueue;
     readonly alerts?: Alerts;
     readonly vapidPublicKey?: string | undefined;
+    readonly images?: ImageCache;
   };
 }
 
@@ -80,6 +84,8 @@ export function createApp(deps: AppDeps): Express {
     const alerts = deps.core.alerts ?? new Alerts(db, null, log);
     app.use('/api/push', pushRoutes({ db, alerts, publicKey: deps.core.vapidPublicKey }));
     app.use('/api/health-panel', healthPanelRoutes(db));
+    app.use('/api/changes', changeRoutes(db));
+    if (deps.core.images !== undefined) app.use('/img', imageRoutes(db, deps.core.images));
   }
 
   if (deps.webDist !== undefined) {
@@ -87,7 +93,7 @@ export function createApp(deps: AppDeps): Express {
     app.use(express.static(webDist, { index: 'index.html', maxAge: '1h' }));
     // The app's own paths (/library, /show/…) load the app; the API never falls through to it.
     app.use((req, res, next) => {
-      const api = req.path.startsWith('/api/') || req.path.startsWith('/auth/') || req.path.startsWith('/health');
+      const api = req.path.startsWith('/api/') || req.path.startsWith('/auth/') || req.path.startsWith('/health') || req.path.startsWith('/img/');
       if (req.method !== 'GET' || api || !req.accepts('html')) {
         next();
         return;

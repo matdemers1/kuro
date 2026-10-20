@@ -3,6 +3,7 @@ import { migrate } from './boot.js';
 import { CrSidecar } from './adapters/crunchyroll.js';
 import { resumeInterrupted, startPgBossQueue } from './jobs/queue.js';
 import { Alerts, vapidTransport } from './push/sender.js';
+import { ImageCache } from './images/cache.js';
 import { createOidcClient } from './auth/oidc.js';
 import { loadConfig, requireSecrets } from './config.js';
 import { createDb } from './db.js';
@@ -28,7 +29,7 @@ await resumeInterrupted(syncDeps, queue);
 createApp({
   version,
   webDist: config.WEB_DIST,
-  core: { db, baseUrl: config.BASE_URL, secretKey, pepper, oidc, log, setupToken: config.SETUP_TOKEN, sidecarUrl: config.KURO_CR_URL, sidecar, queue, alerts, vapidPublicKey: config.VAPID_PUBLIC_KEY },
+  core: { db, baseUrl: config.BASE_URL, secretKey, pepper, oidc, log, setupToken: config.SETUP_TOKEN, sidecarUrl: config.KURO_CR_URL, sidecar, queue, alerts, vapidPublicKey: config.VAPID_PUBLIC_KEY, images: new ImageCache(config.IMAGE_DIR) },
 }).listen(config.PORT, () => {
   log.info({ port: config.PORT, version, oidc: oidc !== null }, 'kuro-server listening');
 });

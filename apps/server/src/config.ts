@@ -19,6 +19,8 @@ const Env = z.object({
   AUTH_PEPPER: Secret32.optional(),
   /** First-run gate (KURO-REQ-055). Unused once the owner exists. */
   SETUP_TOKEN: z.string().min(16).optional(),
+  /** Cached images (KURO-REQ-021): the `images` volume. */
+  IMAGE_DIR: z.string().default('/data/images'),
   /** pg_dump output: pre-migration, manual and Shipyard's backup step. */
   BACKUP_DIR: z.string().default('/data/backups'),
   /** Take a dump before applying migrations to a database that already holds data. */

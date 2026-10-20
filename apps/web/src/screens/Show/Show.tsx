@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BackIcon, CheckIcon, EyeIcon, PinIcon } from '../../components/icons.js';
-import { Poster } from '../../components/Poster.js';
+import { Poster, posterFor } from '../../components/Poster.js';
 import { Button } from '../../components/ui.js';
 import { api } from '../../lib/api.js';
 import { audio, hours, se } from '../../lib/format.js';
@@ -37,6 +37,10 @@ function EpisodeRow({ e }: { e: Episode }) {
   return (
     <li className={`flex items-center gap-3 rounded-[10px] px-3 py-2 ${e.isNext ? 'border border-shu bg-raised' : ''}`}>
       <span className={`w-8 font-mono text-[12px] ${e.watched ? 'text-faint' : 'text-muted'}`}>E{e.episodeNumber ?? '–'}</span>
+      <div className="h-9 w-16 shrink-0 overflow-hidden rounded-[6px] bg-raised">
+        {/* A thumbnail spoils as much as a title: past your position it stays hidden too. */}
+        {!hidden && <img src={`/img/episode/${encodeURIComponent(e.crEpisodeId)}/thumb`} alt="" loading="lazy" className="h-full w-full object-cover" onError={(ev) => { ev.currentTarget.style.display = 'none'; }} />}
+      </div>
       <div className="min-w-0 flex-1">
         {hidden ? (
           <button type="button" onClick={() => { setRevealed(true); }} className="flex items-center gap-2 text-[15px] text-faint" aria-label={`Reveal episode ${String(e.episodeNumber ?? '')} title`}>
@@ -74,7 +78,8 @@ export function Show({ showKey }: { showKey: string }) {
   return (
     <main className="mx-auto w-full max-w-2xl bg-canvas text-ink">
       <header className="relative flex min-h-[220px] flex-col justify-end gap-1 overflow-hidden px-4 pt-14 pb-5">
-        <Poster title={show.title} className="absolute inset-0 rounded-none opacity-90" />
+        <Poster title={show.title} src={posterFor(show.showKey)} className="absolute inset-0 rounded-none opacity-90" />
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/10" />
         <button type="button" onClick={() => { window.history.back(); }} className="absolute top-4 left-3 text-on-accent" aria-label="Back"><BackIcon /></button>
         <h1 className="relative font-display text-[28px] leading-[34px] font-bold text-on-accent">{show.title}</h1>
       </header>
