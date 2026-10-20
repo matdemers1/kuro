@@ -3,6 +3,7 @@ import { CrSidecarError, type CrSidecar } from '../adapters/crunchyroll.js';
 import * as connection from '../cr/connection.js';
 import type { Db } from '../db.js';
 import type { Logger } from '../logger.js';
+import type { MediaSource } from '../match/pool.js';
 
 /**
  * One sync run against Crunchyroll's watch history, into the History Vault (KURO-REQ-003..006).
@@ -38,6 +39,8 @@ export interface SyncDeps {
   readonly pauseMs?: number;
   /** Overrides both page sizes (tests). */
   readonly pageSize?: number;
+  /** AniList for the matcher; without it, matching is skipped (tests that only sync). */
+  readonly anilist?: MediaSource;
 }
 
 export type SyncOutcome =

@@ -2,6 +2,7 @@ import PgBoss from 'pg-boss';
 import type { Logger } from '../logger.js';
 import { resolveCatalog, resolveMarkers } from '../cr/resolve.js';
 import { rebuildShows } from '../derive/rebuild.js';
+import { matchCatalog } from '../match/run.js';
 import type { Alerts } from '../push/sender.js';
 import { checkAlerts } from './alertsCheck.js';
 import { registerCatalogImport } from './catalogImport.js';
@@ -14,7 +15,7 @@ import { runSync, type SyncDeps, type SyncKind } from '../sync/run.js';
  * overlap. Tests use the inline queue, which runs at once.
  */
 export interface SyncQueue {
-  request(userId: string, kind: SyncKind | 'derive'): Promise<void>;
+  request(userId: string, kind: SyncKind | 'derive' | 'match'): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -27,8 +28,11 @@ export const NIGHTLY_CRON = '0 3 * * *';
 
 interface SyncJob {
   userId: string;
-  /** `derive` finishes what a sync started — matching and Up Next — without syncing again. */
-  kind: SyncKind | 'derive';
+  /**
+   * `derive` finishes what a sync started — matching and Up Next — without syncing again; `match`
+   * re-runs only the matcher and derivation, after a catalog import.
+   */
+  kind: SyncKind | 'derive' | 'match';
 }
 
 /**
@@ -40,6 +44,11 @@ export async function afterSync(deps: SyncDeps, userId: string, runId: string, l
   await resolveCatalog(deps, userId).catch((err: unknown) => {
     log.warn({ err: err instanceof Error ? err.message : String(err) }, 'catalog resolve failed; it retries after the next sync');
   });
+  if (deps.anilist !== undefined) {
+    await matchCatalog({ db: deps.db, anilist: deps.anilist, log }, userId).catch((err: unknown) => {
+      log.warn({ err: err instanceof Error ? err.message : String(err) }, 'matching failed; it retries after the next sync');
+    });
+  }
   let shows = await rebuildShows(deps.db, userId);
   await deps.db.syncRun.update({ where: { id: runId }, data: { derivedAt: new Date() } });
   log.info({ shows }, 'derived state rebuilt');
@@ -64,6 +73,11 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
   await boss.work<SyncJob>(QUEUE, { batchSize: 1 }, async ([job]) => {
     if (job === undefined) return;
     const { userId, kind } = job.data;
+    if (kind === 'match') {
+      if (deps.anilist !== undefined) await matchCatalog({ db: deps.db, anilist: deps.anilist, log }, userId);
+      log.info({ shows: await rebuildShows(deps.db, userId) }, 'derived state rebuilt after matching');
+      return;
+    }
     if (kind === 'derive') {
       const run = await deps.db.syncRun.findFirst({ where: { crConnection: { userId }, status: 'succeeded' }, orderBy: { startedAt: 'desc' } });
       if (run !== null) await afterSync(deps, userId, run.id, log);
@@ -90,7 +104,12 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
       await checkAlerts(deps.db, alerts);
     });
   }
-  if (catalog !== undefined) await registerCatalogImport(boss, deps.db, catalog, log, timezone);
+  if (catalog !== undefined) {
+    // A new catalog release can retire entries and add better ones: match again after each import.
+    await registerCatalogImport(boss, deps.db, catalog, log, timezone, async () => {
+      for (const { userId } of await deps.db.crConnection.findMany({ select: { userId: true } })) await boss.send(QUEUE, { userId, kind: 'match' } satisfies SyncJob, { singletonKey: userId });
+    });
+  }
   return {
     async request(userId, kind) {
       await boss.send(QUEUE, { userId, kind } satisfies SyncJob, { singletonKey: userId, retryLimit: 0 });
@@ -106,7 +125,7 @@ export function inlineQueue(deps: SyncDeps): SyncQueue & { readonly done: Promis
   return {
     done,
     request(userId, kind) {
-      if (kind !== 'derive') done.push(runSync(deps, userId, kind));
+      if (kind === 'backfill' || kind === 'delta') done.push(runSync(deps, userId, kind));
       return Promise.resolve();
     },
     stop: () => Promise.resolve(),

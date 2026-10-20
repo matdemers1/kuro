@@ -1,5 +1,6 @@
 import { createApp } from './app.js';
 import { migrate } from './boot.js';
+import { AniList } from './adapters/anilist.js';
 import { CrSidecar } from './adapters/crunchyroll.js';
 import { resumeInterrupted, startPgBossQueue } from './jobs/queue.js';
 import { Alerts, vapidTransport } from './push/sender.js';
@@ -17,7 +18,8 @@ await migrate({ databaseUrl, backupDir: config.BACKUP_DIR, backupFirst: config.B
 const db = createDb(databaseUrl);
 const oidc = await createOidcClient(config, log);
 const sidecar = new CrSidecar(config.KURO_CR_URL);
-const syncDeps = { db, sidecar, secretKey, log };
+// One AniList client for the whole process, so every caller shares its 20-a-minute budget.
+const syncDeps = { db, sidecar, secretKey, log, anilist: new AniList(db, log) };
 const transport =
   config.VAPID_PUBLIC_KEY !== undefined && config.VAPID_PRIVATE_KEY !== undefined
     ? vapidTransport({ publicKey: config.VAPID_PUBLIC_KEY, privateKey: config.VAPID_PRIVATE_KEY, subject: config.VAPID_SUBJECT }, log)
