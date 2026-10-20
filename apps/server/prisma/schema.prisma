@@ -346,6 +346,8 @@ model ShowPreference {
   statusAt  DateTime? @map("status_at") @db.Timestamptz(6)
   /// Why it was dropped (KURO-REQ-043): pacing, not_for_me or got_busy.
   dropReason String?  @map("drop_reason")
+  /// Leave filler out of the Show's main line: Up Next goes past it, and it never blocks Completed (KURO-T-5.3).
+  skipFiller Boolean  @default(false) @map("skip_filler")
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("show_preference")
@@ -650,4 +652,28 @@ model TasteTerm {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("taste_term")
+}
+
+/// A show's episode guide on animefillerlist.com (KURO-T-5.3, KURO-ADR-012): fetched only for the
+/// owner's long Shows, weekly at most, a request every ten seconds.
+model FillerList {
+  slug      String          @id
+  /// "English (Romaji)", as the site names it: what links it to a Season.
+  title     String
+  fetchedAt DateTime        @map("fetched_at") @db.Timestamptz(6)
+  episodes  FillerEpisode[]
+
+  @@map("filler_list")
+}
+
+/// One episode of a filler list, numbered as the site numbers the whole run.
+model FillerEpisode {
+  slug   String
+  number Int
+  /// canon | mixed | filler | anime_canon
+  kind   String
+  list   FillerList @relation(fields: [slug], references: [slug], onDelete: Cascade)
+
+  @@id([slug, number])
+  @@map("filler_episode")
 }

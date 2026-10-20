@@ -1,4 +1,6 @@
 import { Media } from '../adapters/anilist.js';
+import type { FillerKind } from '../adapters/fillerlist.js';
+import { kindOf, linkSeasons } from '../filler/link.js';
 import { loadOverrides } from '../overrides/overrides.js';
 import type { Db } from '../db.js';
 import { seasonIndex } from '../match/ranges.js';
@@ -26,6 +28,8 @@ export interface ShowInputs {
   readonly comingEntryId: string | null;
   /** On the watchlist or a Crunchylist (KURO-T-3.5): with nothing watched, Plan to watch. */
   readonly plannedAt: Date | null;
+  /** The filler guides covering the Show's Seasons (KURO-T-5.3), by slug. */
+  readonly fillerSlugs: readonly string[];
 }
 
 /** Everything derivation needs, grouped into Shows. `only` narrows to one Show (the detail page). */
@@ -82,6 +86,11 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
     await loadOverrides(db),
   );
 
+  // Filler guides (KURO-T-5.3): each list's episodes, linked to Seasons per Show below.
+  const fillerLists = await db.fillerList.findMany({ include: { episodes: true } });
+  const fillerKinds = new Map(fillerLists.map((l) => [l.slug, new Map(l.episodes.map((e) => [e.number, e.kind as FillerKind]))]));
+  const fillerIn = fillerLists.map((l) => ({ slug: l.slug, title: l.title, count: Math.max(0, ...l.episodes.map((e) => e.number)) }));
+
   const seriesById = new Map(series.map((s) => [s.id, s]));
   const mappingsBySeason = new Map<string, typeof mappings>();
   for (const m of mappings) mappingsBySeason.set(m.crSeasonId, [...(mappingsBySeason.get(m.crSeasonId) ?? []), m]);
@@ -92,6 +101,13 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
     if (!show.seriesIds.some((id) => bySeries.has(id) || plannedAt.has(id))) continue;
     const position = new Map(show.items.map((i) => [i.entryId, i.position]));
     const matched = show.key.startsWith('show:');
+    const fillerLinks = fillerIn.length === 0 ? new Map<string, { slug: string; offset: number }>() : linkSeasons(
+      show.items.filter((i) => i.kind === 'season').flatMap((i) => {
+        const e = entries.get(i.entryId);
+        return e === undefined ? [] : [{ entryId: e.id, title: e.title, synonyms: e.synonyms, episodes: e.episodes }];
+      }),
+      fillerIn,
+    );
     const main: EpisodeIn[] = [];
     const extras: EpisodeIn[] = [];
     const members = show.seriesIds.flatMap((id) => seriesById.get(id) ?? []);
@@ -121,7 +137,10 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
             // An entry in another Show — split off, or attached elsewhere — is that Show's to count.
             const at = position.get(range.catalogEntryId);
             if (at === undefined) continue;
-            const ranked = { ...base, rank: [at, n + range.offset] as const };
+            const filler = kindOf(fillerLinks, fillerKinds, range.catalogEntryId, n + range.offset);
+            // Episodes that land on the same catalog episode are versions of one episode — a dub and
+            // Crunchyroll's separate "Special Edition HD, Subtitled" season, say — whatever their IDs.
+            const ranked = { ...base, canonicalId: `${range.catalogEntryId}#${String(n + range.offset)}`, rank: [at, n + range.offset] as const, ...(filler === undefined ? {} : { filler }) };
             if (grouping.kindOfEntry.get(range.catalogEntryId) === 'extra') extras.push(ranked);
             else main.push(ranked);
           } else if (grouping.showOfSeries.get(s.id) !== show.key) {
@@ -156,6 +175,7 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
       moreComing,
       comingEntryId,
       plannedAt: show.seriesIds.map((id) => plannedAt.get(id)).find((d) => d !== undefined) ?? null,
+      fillerSlugs: [...new Set([...fillerLinks.values()].map((l) => l.slug))],
     });
   }
   return out;
@@ -165,9 +185,11 @@ export async function rebuildShows(db: Db, userId: string, now = new Date(), fal
   const inputs = await loadShows(db, userId);
   const prefs = await db.showPreference.findMany();
   const manualOf = new Map(prefs.flatMap((p) => (p.status === 'plan_to_watch' || p.status === 'dropped' ? [[p.showKey, { status: p.status, at: p.statusAt ?? p.updatedAt }] as const] : [])));
+  const skipFiller = new Set(prefs.filter((p) => p.skipFiller).map((p) => p.showKey));
   const derived = inputs.map(({ show, main, plays, moreComing, comingEntryId, plannedAt }) => {
     // The owner's own status first; a show on a Crunchyroll list is planned until watched.
-    const { rewatches, ...out } = deriveShow(main, plays, now, fallbackLocale, { moreComing, manual: manualOf.get(show.key) ?? (plannedAt === null ? null : { status: 'plan_to_watch', at: plannedAt }) });
+    const manual = manualOf.get(show.key) ?? (plannedAt === null ? null : { status: 'plan_to_watch' as const, at: plannedAt });
+    const { rewatches, ...out } = deriveShow(main, plays, now, fallbackLocale, { moreComing, manual, skipFiller: skipFiller.has(show.key) });
     return { state: { showKey: show.key, title: show.title, comingEntryId, ...out, derivedAt: now }, rewatches: rewatches.map((r) => ({ showKey: show.key, ...r })) };
   });
   const states = derived.map((d) => d.state);
