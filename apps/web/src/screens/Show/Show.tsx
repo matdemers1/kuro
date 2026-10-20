@@ -3,7 +3,7 @@ import { BackIcon, CheckIcon, EyeIcon, PinIcon } from '../../components/icons.js
 import { Poster, posterFor } from '../../components/Poster.js';
 import { Button } from '../../components/ui.js';
 import { api } from '../../lib/api.js';
-import { audio, hours, se } from '../../lib/format.js';
+import { audio, hours, se, statusLabel } from '../../lib/format.js';
 import { navigate } from '../../lib/router.js';
 
 interface Episode {
@@ -24,6 +24,8 @@ interface ShowDetail {
   title: string;
   description: string | null;
   status: string;
+  /** The owner's own status, when set: plan_to_watch or dropped. */
+  manualStatus?: string | null;
   pinned: boolean;
   watchedEpisodes: number;
   totalEpisodes: number;
@@ -85,6 +87,11 @@ export function Show({ showKey }: { showKey: string }) {
   const tabs = [...new Map(show.episodes.map((e) => [tabOf(e), e.seasonNumber])).entries()];
   const labels = new Map(tabs.map(([key, n], i) => [key, tabs.filter(([, m]) => m === n).length > 1 ? `S${String(n)} · ${String(i + 1)}` : `S${String(n)}`]));
   const pct = show.totalEpisodes > 0 ? Math.round((show.watchedEpisodes / show.totalEpisodes) * 100) : 0;
+  const setStatus = (status: 'plan_to_watch' | 'dropped' | null) => {
+    void api(`/api/shows/${encodeURIComponent(showKey)}/status`, { method: 'PUT', body: { status } })
+      .then(() => api<ShowDetail>(`/api/shows/${encodeURIComponent(showKey)}`))
+      .then(setShow);
+  };
   const togglePin = () => {
     void api(`/api/shows/${encodeURIComponent(showKey)}/pin`, { method: 'PUT', body: { pinned: !show.pinned } }).then(() => { setShow({ ...show, pinned: !show.pinned }); });
   };
@@ -99,10 +106,20 @@ export function Show({ showKey }: { showKey: string }) {
       </header>
       <div className="flex flex-col gap-4 px-4 py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-shu px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-shu uppercase">{show.status.replace('_', ' ')}</span>
+          <span className="rounded-full border border-shu px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-shu uppercase">{statusLabel(show.status)}</span>
           <button type="button" onClick={togglePin} aria-pressed={show.pinned} className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] uppercase ${show.pinned ? 'border-kin text-kin' : 'border-line-strong text-muted'}`}>
             <PinIcon /> {show.pinned ? 'Pinned' : 'Pin'}
           </button>
+          {/* Dropped and Plan to watch are the owner's alone; every other status is derived. */}
+          {show.manualStatus !== 'dropped' && show.status !== 'completed' && (
+            <button type="button" onClick={() => { setStatus('dropped'); }} className="rounded-full border border-line-strong px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-muted uppercase">Drop</button>
+          )}
+          {show.manualStatus !== 'plan_to_watch' && show.watchedEpisodes === 0 && (
+            <button type="button" onClick={() => { setStatus('plan_to_watch'); }} className="rounded-full border border-line-strong px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-muted uppercase">Plan to watch</button>
+          )}
+          {show.manualStatus !== null && show.manualStatus !== undefined && (
+            <button type="button" onClick={() => { setStatus(null); }} className="rounded-full border border-line-strong px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-muted uppercase">Back to automatic</button>
+          )}
         </div>
         <div className="h-1 w-full overflow-hidden rounded-full bg-raised" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Show progress">
           <div className="h-full bg-kin" style={{ width: `${String(pct)}%` }} />

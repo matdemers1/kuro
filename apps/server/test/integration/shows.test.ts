@@ -73,6 +73,12 @@ afterAll(async () => {
 });
 
 const get = async <T>(path: string) => (await (await fetch(`${h.base}${path}`, { headers: { cookie } })).json()) as T;
+const put = (path: string, body: unknown) => fetch(`${h.base}${path}`, { method: 'PUT', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const stateOf = async () => h.db.showState.findUniqueOrThrow({ where: { showKey: KEY } });
+const playAgo = async (ep: string, series: string, daysAgo: number) => {
+  const run = await h.db.syncRun.findFirstOrThrow({ where: { crConnection: { userId } } });
+  await h.db.play.create({ data: { crEpisodeId: ep, crParentId: series, crParentType: 'series', datePlayed: new Date(Date.now() - daysAgo * 86_400_000), playheadS: 1420, fullyWatched: true, raw: {}, syncRunId: run.id } });
+};
 
 describe('Shows from matched seasons (KURO-T-2.5)', () => {
   it('makes one Show of the series Crunchyroll split, with the movie as an optional Extra after Season 1', async () => {
@@ -110,5 +116,33 @@ describe('Shows from matched seasons (KURO-T-2.5)', () => {
     const first = await snap();
     await rebuildShows(h.db, userId);
     expect(await snap()).toBe(first);
+  });
+});
+
+describe('statuses on real Shows (KURO-T-2.7)', () => {
+  it('Dropped is the owner’s: it leaves Up Next, is change-logged, and undo brings it back', async () => {
+    expect((await put(`/api/shows/${encodeURIComponent(KEY)}/status`, { status: 'dropped' })).status).toBe(204);
+    expect((await stateOf()).status).toBe('dropped');
+    const upNext = await get<{ items: { showKey: string }[] }>('/api/up-next');
+    expect(upNext.items.some((i) => i.showKey === KEY)).toBe(false);
+    const change = await h.db.changeLog.findFirstOrThrow({ where: { entity: 'show_status', entityId: KEY }, orderBy: { at: 'desc' } });
+    expect((await fetch(`${h.base}/api/changes/${change.id}/undo`, { method: 'POST', headers: { cookie } })).status).toBe(204);
+    expect((await stateOf()).status).toBe('watching');
+  });
+
+  it('Caught up, not Completed, when everything out is watched and the last Season is still airing', async () => {
+    for (const [ep, d] of [['GB3E1', 0.9], ['GB3E2', 0.8], ['GBFE1', 0.7], ['GBFE2', 0.6]] as const) await playAgo(ep, ep.startsWith('GBF') ? 'GBLADEFIN' : 'GBLADE', d);
+    await h.db.catalogEntry.update({ where: { id: 'anilist:7004' }, data: { status: 'ONGOING' } });
+    await rebuildShows(h.db, userId);
+    expect((await stateOf()).status).toBe('caught_up');
+    await h.db.catalogEntry.update({ where: { id: 'anilist:7004' }, data: { status: 'FINISHED' } });
+    await rebuildShows(h.db, userId);
+    expect((await stateOf()).status).toBe('completed');
+  });
+
+  it('Rewatching after the end, picking up after the episode replayed', async () => {
+    await playAgo('GB1E1', 'GBLADE', 0.1);
+    await rebuildShows(h.db, userId);
+    expect(await stateOf()).toMatchObject({ status: 'rewatching', nextCrEpisodeId: 'GB1E2' });
   });
 });

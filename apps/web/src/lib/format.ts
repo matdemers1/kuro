@@ -12,3 +12,15 @@ const LOCALES: Record<string, string> = { 'en-US': 'English dub', 'ja-JP': 'Japa
 export function audio(locale: string | null): string {
   return locale === null ? '' : (LOCALES[locale] ?? locale);
 }
+
+/** The seven statuses (KURO-REQ-033), as the owner reads them. */
+export const STATUS_LABEL: Record<string, string> = {
+  plan_to_watch: 'Plan to watch',
+  watching: 'Watching',
+  caught_up: 'Caught up',
+  paused: 'Paused',
+  completed: 'Completed',
+  dropped: 'Dropped',
+  rewatching: 'Rewatching',
+};
+export const statusLabel = (s: string): string => STATUS_LABEL[s] ?? s;

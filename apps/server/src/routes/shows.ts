@@ -45,6 +45,7 @@ export function showRoutes(db: Db): Router {
         title: state.title,
         description: inputs.description,
         status: state.status,
+        manualStatus: pref?.status ?? null,
         pinned: pref?.pinned ?? false,
         watchedEpisodes: state.watchedEpisodes,
         totalEpisodes: state.totalEpisodes,
@@ -74,6 +75,26 @@ export function showRoutes(db: Db): Router {
       const before = await db.showPreference.findUnique({ where: { showKey: key } });
       await db.showPreference.upsert({ where: { showKey: key }, create: { showKey: key, pinned: body.data.pinned }, update: { pinned: body.data.pinned } });
       await record(db, { userId, entity: 'show_preference', entityId: key, action: body.data.pinned ? 'pinned' : 'unpinned', before: { pinned: before?.pinned ?? false }, after: { pinned: body.data.pinned } });
+      await rebuildShows(db, userId);
+      res.status(204).end();
+    })().catch(next);
+  });
+
+  /** The owner's own status — Plan to watch, Dropped, or neither (derived) — change-logged (KURO-REQ-033). */
+  router.put('/:key/status', (req, res, next) => {
+    const body = z.object({ status: z.enum(['plan_to_watch', 'dropped']).nullable() }).safeParse(req.body);
+    const key = req.params['key'];
+    if (!body.success || !(key.startsWith('cr:') || key.startsWith('show:'))) {
+      res.status(400).json({ error: 'status must be plan_to_watch, dropped or null' });
+      return;
+    }
+    const userId = req.auth?.userId ?? '';
+    void (async () => {
+      const before = await db.showPreference.findUnique({ where: { showKey: key } });
+      const status = body.data.status;
+      const data = { status, statusAt: status === null ? null : new Date() };
+      await db.showPreference.upsert({ where: { showKey: key }, create: { showKey: key, ...data }, update: data });
+      await record(db, { userId, entity: 'show_status', entityId: key, action: status ?? 'cleared', before: { status: before?.status ?? null, statusAt: before?.statusAt?.toISOString() ?? null }, after: { status, statusAt: data.statusAt?.toISOString() ?? null } });
       await rebuildShows(db, userId);
       res.status(204).end();
     })().catch(next);

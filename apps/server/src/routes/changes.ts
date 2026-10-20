@@ -18,6 +18,15 @@ const UNDOABLE: Record<string, (db: Db, entityId: string, before: Record<string,
     await db.showPreference.upsert({ where: { showKey }, create: { showKey, pinned }, update: { pinned } });
     return 'ok';
   },
+  /** The owner's status for a Show, back to what it was, if nothing changed it since. */
+  async show_status(db, showKey, before, after) {
+    const now = await db.showPreference.findUnique({ where: { showKey } });
+    if ((now?.status ?? null) !== after['status']) return 'moved_on';
+    const status = (before['status'] as string | null | undefined) ?? null;
+    const at = typeof before['statusAt'] === 'string' ? new Date(before['statusAt']) : null;
+    await db.showPreference.upsert({ where: { showKey }, create: { showKey, status, statusAt: at }, update: { status, statusAt: at } });
+    return 'ok';
+  },
   /** A review-queue answer: the season's mappings go back to what they were, if nothing changed since. */
   async mapping_season(db, seasonId, before, after) {
     const now = await snapshot(db, seasonId);

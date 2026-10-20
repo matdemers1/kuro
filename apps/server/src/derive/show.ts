@@ -4,7 +4,9 @@
  * writes outputs — so every rule is golden-testable and two rebuilds are identical by construction.
  */
 
-export const PAUSED_AFTER_MS = 42 * 24 * 60 * 60 * 1000; // 6 weeks (KURO-REQ-016)
+import { deriveStatus, type ManualStatus, type ShowStatus } from './status.js';
+
+export { PAUSED_AFTER_MS } from './status.js';
 export const WATCHED_FRACTION = 0.9; // when Crunchyroll publishes no credits marker
 
 export interface EpisodeIn {
@@ -36,7 +38,15 @@ export interface PlayIn {
   readonly fullyWatched: boolean;
 }
 
-export type Status = 'watching' | 'caught_up' | 'paused' | 'completed';
+export type Status = ShowStatus;
+
+/** What derivation needs beyond episodes and plays (KURO-T-2.7). */
+export interface DeriveOptions {
+  /** The current Season is still airing, or a sequel is announced: "Caught up", not "Completed". */
+  readonly moreComing?: boolean;
+  /** The owner's own status: Plan to watch or Dropped. */
+  readonly manual?: { readonly status: ManualStatus; readonly at: Date } | null;
+}
 
 export interface ShowOut {
   readonly status: Status;
@@ -111,22 +121,34 @@ export function preferredLocale(plays: readonly PlayIn[], byId: ReadonlyMap<stri
   return (latest !== undefined ? byId.get(latest.crEpisodeId)?.audioLocale : undefined) ?? fallback;
 }
 
-export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayIn[], now: Date, fallbackLocale: string | null = 'en-US'): ShowOut {
+export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayIn[], now: Date, fallbackLocale: string | null = 'en-US', options: DeriveOptions = {}): ShowOut {
   const byId = new Map(episodes.map((e) => [e.id, e]));
   const ordered = canonicalEpisodes(episodes);
+  const indexOf = new Map(ordered.map((c, i) => [c.id, i]));
   const watched = new Set<string>();
   let lastPlayedAt: Date | null = null;
-  for (const p of plays) {
+  // Plays in time order: when the whole main line was first watched, and whether the latest play
+  // went back over an episode already watched after that — a rewatch.
+  let completedAt: Date | null = null;
+  let rewatchAt: number | null = null;
+  for (const p of [...plays].sort((a, b) => a.datePlayed.getTime() - b.datePlayed.getTime())) {
     const e = byId.get(p.crEpisodeId);
     if (lastPlayedAt === null || p.datePlayed > lastPlayedAt) lastPlayedAt = p.datePlayed;
+    const replay = e !== undefined && completedAt !== null && watched.has(e.canonicalId);
+    rewatchAt = replay ? (indexOf.get(e.canonicalId) ?? null) : null;
     if (e !== undefined && isWatched(p, e)) watched.add(e.canonicalId);
+    if (completedAt === null && ordered.length > 0 && ordered.every((c) => watched.has(c.id))) completedAt = p.datePlayed;
   }
+  // A rewatch that reached the last episode is over: the Show is Completed again.
+  const rewatching = rewatchAt !== null && rewatchAt < ordered.length - 1;
 
-  // Position: after the last watched episode, so one skipped episode never holds the Show back.
+  // Position: after the last watched episode, so one skipped episode never holds the Show back —
+  // or, during a rewatch, after the episode replayed most recently.
   let lastIndex = -1;
   ordered.forEach((c, i) => {
     if (watched.has(c.id)) lastIndex = i;
   });
+  if (rewatching && rewatchAt !== null) lastIndex = rewatchAt;
   const current = lastIndex >= 0 ? ordered[lastIndex] : undefined;
   const next = ordered[lastIndex + 1];
   const locale = preferredLocale(plays, byId, fallbackLocale);
@@ -142,14 +164,15 @@ export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayI
   const nextIsNewSeason =
     next !== undefined && current !== undefined && (matched ? next.primary.seasonId !== current.primary.seasonId && compareRank(next.primary.rank, current.primary.rank) > 0 : next.primary.seasonNumber > current.primary.seasonNumber);
 
-  let status: Status;
-  if (next === undefined) status = ordered.length > 0 && watched.size > 0 ? 'completed' : 'watching';
-  else if (lastPlayedAt !== null && now.getTime() - lastPlayedAt.getTime() > PAUSED_AFTER_MS && !nextIsNew) status = 'paused';
-  else status = 'watching';
+  const watchedCount = ordered.filter((c) => watched.has(c.id)).length;
+  const status = deriveStatus(
+    { total: ordered.length, watched: watchedCount, nextAvailable: next !== undefined, nextIsNew, lastPlayedAt, moreComing: options.moreComing ?? false, rewatching, manual: options.manual ?? null },
+    now,
+  );
 
   return {
     status,
-    watchedEpisodes: ordered.filter((c) => watched.has(c.id)).length,
+    watchedEpisodes: watchedCount,
     totalEpisodes: ordered.length,
     remainingS,
     currentSeason: seasonOf(current?.primary),
@@ -184,7 +207,8 @@ export type UpNextGroup = 'pinned' | 'new' | 'recent' | 'next_season' | 'paused'
  */
 export function upNext(rows: readonly UpNextRow[]): { showKey: string; group: UpNextGroup }[] {
   const groupOf = (r: UpNextRow): UpNextGroup | null => {
-    if (r.nextCrEpisodeId === null) return null;
+    // Nothing to watch next, or the owner set it aside: not in Up Next.
+    if (r.nextCrEpisodeId === null || r.status === 'dropped' || r.status === 'plan_to_watch') return null;
     if (r.pinned) return 'pinned';
     if (r.status === 'paused') return 'paused';
     if (r.nextIsNewSeason) return 'next_season';
