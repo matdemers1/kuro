@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { Media } from '../adapters/anilist.js';
 import { requireUser } from '../auth/middleware.js';
 import type { Db } from '../db.js';
-import { loadShows } from '../derive/rebuild.js';
-import { isWatched } from '../derive/show.js';
+import { progressOf } from '../derive/progress.js';
 import { timeline, type TimelineEntry } from '../derive/timeline.js';
 import { seasonIndex } from '../match/ranges.js';
 
@@ -16,28 +15,6 @@ import { seasonIndex } from '../match/ranges.js';
 /** AniList relations worth a place on a timeline; recaps, alternatives and character links are not. */
 const TIMELINE_RELATIONS = new Set(['SEQUEL', 'PREQUEL', 'SIDE_STORY', 'PARENT']);
 
-/** Episodes watched and in all, per catalog entry of a Show. */
-async function progressOf(db: Db, userId: string, showKey: string): Promise<Map<string, { watched: number; total: number }>> {
-  const [inputs] = await loadShows(db, userId, showKey);
-  const out = new Map<string, { watched: number; total: number }>();
-  if (inputs === undefined) return out;
-  const entryAt = new Map(inputs.show.items.map((i) => [i.position, i.entryId]));
-  const watched = new Set<string>();
-  const byId = new Map([...inputs.main, ...inputs.extras].map((e) => [e.id, e]));
-  for (const p of inputs.plays) {
-    const e = byId.get(p.crEpisodeId);
-    if (e !== undefined && isWatched(p, e)) watched.add(e.canonicalId);
-  }
-  const seen = new Set<string>();
-  for (const e of [...inputs.main, ...inputs.extras]) {
-    const entryId = e.rank === undefined ? undefined : entryAt.get(e.rank[0]);
-    if (entryId === undefined || seen.has(e.canonicalId)) continue;
-    seen.add(e.canonicalId);
-    const p = out.get(entryId) ?? { watched: 0, total: 0 };
-    out.set(entryId, { watched: p.watched + (watched.has(e.canonicalId) ? 1 : 0), total: p.total + 1 });
-  }
-  return out;
-}
 export function franchiseRoutes(db: Db): Router {
   const router = Router();
   router.use(requireUser);
