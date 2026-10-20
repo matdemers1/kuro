@@ -22,6 +22,8 @@ export interface ShowInputs {
   readonly description: string | null;
   /** The last Season is still airing, or a sequel is announced (KURO-T-2.7). */
   readonly moreComing: boolean;
+  /** That announced or airing sequel, when there is one (KURO-T-3.4). */
+  readonly comingEntryId: string | null;
   /** On the watchlist or a Crunchylist (KURO-T-3.5): with nothing watched, Plan to watch. */
   readonly plannedAt: Date | null;
 }
@@ -63,8 +65,10 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
     }
   }
   // Where the catalog says those sequels stand: an UPCOMING or ONGOING one means more is coming.
-  const coming = new Set(
-    (await db.catalogEntry.findMany({ where: { anilistId: { in: [...new Set([...sequelsOf.values()].flat())] }, status: { in: ['UPCOMING', 'ONGOING'] } }, select: { anilistId: true } })).flatMap((e) => (e.anilistId === null ? [] : [e.anilistId])),
+  const coming = new Map(
+    (await db.catalogEntry.findMany({ where: { anilistId: { in: [...new Set([...sequelsOf.values()].flat())] }, status: { in: ['UPCOMING', 'ONGOING'] } }, select: { id: true, anilistId: true } })).flatMap((e) =>
+      e.anilistId === null ? [] : [[e.anilistId, e.id] as const],
+    ),
   );
 
   const grouping = groupShows(
@@ -137,9 +141,12 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
     }
     const seasons = show.items.filter((i) => i.kind === 'season').flatMap((i) => entries.get(i.entryId) ?? []);
     const last = seasons.at(-1);
-    const moreComing =
-      (last !== undefined && (last.status === 'ONGOING' || last.status === 'UPCOMING')) ||
-      seasons.some((e) => e.anilistId !== null && (sequelsOf.get(e.anilistId) ?? []).some((id) => coming.has(id) && !seasons.some((x) => x.anilistId === id)));
+    // The announced or airing sequel not yet among the Show's Seasons, if there is one.
+    const sequel = seasons
+      .flatMap((e) => (e.anilistId === null ? [] : (sequelsOf.get(e.anilistId) ?? [])))
+      .find((id) => coming.has(id) && !seasons.some((x) => x.anilistId === id));
+    const comingEntryId = sequel === undefined ? null : (coming.get(sequel) ?? null);
+    const moreComing = (last !== undefined && (last.status === 'ONGOING' || last.status === 'UPCOMING')) || comingEntryId !== null;
     out.push({
       show,
       main,
@@ -147,6 +154,7 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
       plays: show.seriesIds.flatMap((id) => bySeries.get(id) ?? []),
       description: members[0]?.description ?? null,
       moreComing,
+      comingEntryId,
       plannedAt: show.seriesIds.map((id) => plannedAt.get(id)).find((d) => d !== undefined) ?? null,
     });
   }
@@ -157,9 +165,10 @@ export async function rebuildShows(db: Db, userId: string, now = new Date(), fal
   const inputs = await loadShows(db, userId);
   const prefs = await db.showPreference.findMany();
   const manualOf = new Map(prefs.flatMap((p) => (p.status === 'plan_to_watch' || p.status === 'dropped' ? [[p.showKey, { status: p.status, at: p.statusAt ?? p.updatedAt }] as const] : [])));
-  const states = inputs.map(({ show, main, plays, moreComing, plannedAt }) => ({
+  const states = inputs.map(({ show, main, plays, moreComing, comingEntryId, plannedAt }) => ({
     showKey: show.key,
     title: show.title,
+    comingEntryId,
     // The owner's own status first; a show on a Crunchyroll list is planned until watched.
     ...deriveShow(main, plays, now, fallbackLocale, { moreComing, manual: manualOf.get(show.key) ?? (plannedAt === null ? null : { status: 'plan_to_watch', at: plannedAt }) }),
     derivedAt: now,

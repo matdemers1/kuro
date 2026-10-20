@@ -327,6 +327,8 @@ model ShowState {
   nextIsNewSeason Boolean    @default(false) @map("next_is_new_season")
   /// Episodes out in the original but not yet in the owner's dub, after the last dubbed one.
   dubLag          Int        @default(0) @map("dub_lag")
+  /// An announced or airing sequel of the Show's last Season (KURO-T-3.4): the catalog entry.
+  comingEntryId   String?    @map("coming_entry_id")
   lastPlayedAt    DateTime?  @map("last_played_at") @db.Timestamptz(6)
   derivedAt       DateTime   @map("derived_at") @db.Timestamptz(6)
 
@@ -549,4 +551,36 @@ model PlanEntry {
 
   @@id([crSeriesId, source])
   @@map("plan_entry")
+}
+
+/// One row of an AnimeSchedule.net timetable for a week (KURO-T-3.1): replaced whole per week.
+model ScheduleEntry {
+  /// ISO week, as AnimeSchedule numbers them: "2026-W43".
+  week          String
+  route         String
+  /// dub, sub or raw.
+  airType       String    @map("air_type")
+  episodeNumber Int       @default(0) @map("episode_number")
+  episodeDate   DateTime? @map("episode_date") @db.Timestamptz(6)
+  title         String
+  english       String?
+  episodes      Int?
+  status        String?
+  delayedUntil  DateTime? @map("delayed_until") @db.Timestamptz(6)
+  fetchedAt     DateTime  @map("fetched_at") @db.Timestamptz(6)
+
+  @@id([week, route, airType, episodeNumber])
+  @@index([route])
+  @@map("schedule_entry")
+}
+
+/// What an AnimeSchedule route is in the catalog's terms, asked once and kept.
+model ScheduleAnime {
+  route     String   @id
+  anilistId Int?     @map("anilist_id")
+  malId     Int?     @map("mal_id")
+  fetchedAt DateTime @map("fetched_at") @db.Timestamptz(6)
+
+  @@index([anilistId])
+  @@map("schedule_anime")
 }

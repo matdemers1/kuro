@@ -13,6 +13,7 @@ import { syncRoutes } from './routes/sync.js';
 import { upNextRoutes } from './routes/upNext.js';
 import { franchiseRoutes } from './routes/franchises.js';
 import { overrideRoutes } from './routes/overrides.js';
+import { thisSeasonRoutes } from './routes/thisSeason.js';
 import { catalogRoutes, mappingRoutes } from './routes/mappings.js';
 import { showRoutes } from './routes/shows.js';
 import { healthPanelRoutes, pushRoutes } from './routes/push.js';
@@ -88,6 +89,7 @@ export function createApp(deps: AppDeps): Express {
     app.use('/api/catalog', catalogRoutes(db));
     app.use('/api/franchises', franchiseRoutes(db));
     app.use('/api/overrides', overrideRoutes(db));
+    app.use('/api/this-season', thisSeasonRoutes(db));
     const alerts = deps.core.alerts ?? new Alerts(db, null, log);
     app.use('/api/push', pushRoutes({ db, alerts, publicKey: deps.core.vapidPublicKey }));
     app.use('/api/health-panel', healthPanelRoutes(db));

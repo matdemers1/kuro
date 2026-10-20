@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { migrate } from './boot.js';
 import { AniList } from './adapters/anilist.js';
+import { AnimeSchedule } from './adapters/animeschedule.js';
 import { CrSidecar } from './adapters/crunchyroll.js';
 import { resumeInterrupted, startPgBossQueue } from './jobs/queue.js';
 import { Alerts, vapidTransport } from './push/sender.js';
@@ -25,7 +26,8 @@ const transport =
     ? vapidTransport({ publicKey: config.VAPID_PUBLIC_KEY, privateKey: config.VAPID_PRIVATE_KEY, subject: config.VAPID_SUBJECT }, log)
     : null;
 const alerts = new Alerts(db, transport, log);
-const queue = await startPgBossQueue(databaseUrl, syncDeps, log, config.SYNC_TIMEZONE, alerts, { repo: config.KURO_CATALOG_REPO });
+const schedule = config.ANIMESCHEDULE_TOKEN === undefined ? undefined : new AnimeSchedule(config.ANIMESCHEDULE_TOKEN);
+const queue = await startPgBossQueue(databaseUrl, syncDeps, log, config.SYNC_TIMEZONE, alerts, { repo: config.KURO_CATALOG_REPO }, schedule);
 await resumeInterrupted(syncDeps, queue);
 
 createApp({
