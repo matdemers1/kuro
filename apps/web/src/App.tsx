@@ -7,6 +7,7 @@ import { usePath } from './lib/router.js';
 import { Library } from './screens/Library.js';
 import { Show } from './screens/Show/Show.js';
 import { Discover } from './screens/Discover.js';
+import { Stats, YearInReview } from './screens/Stats.js';
 import { TasteProfile } from './screens/TasteProfile.js';
 import { ThisSeason } from './screens/ThisSeason.js';
 import { UpNext } from './screens/UpNext.js';
@@ -50,6 +51,8 @@ function Signed({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   else if (path === '/you') screen = <You name={name} onSignOut={onSignOut} />;
   else if (path === '/you/changes') screen = <ChangeLog />;
   else if (path === '/you/taste') screen = <TasteProfile />;
+  else if (path === '/you/stats') screen = <Stats />;
+  else if (/^\/you\/year\/\d{4}$/.test(path)) screen = <YearInReview key={path} year={Number(path.slice('/you/year/'.length))} />;
   else if (path === '/discover') screen = <Discover />;
   else if (path === '/review') screen = <Review />;
   else if (path.startsWith('/franchise/')) screen = <Franchise franchiseKey={decodeURIComponent(path.slice('/franchise/'.length))} />;
