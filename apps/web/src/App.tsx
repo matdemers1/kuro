@@ -4,6 +4,7 @@ import { api, getSession, type SessionInfo } from './lib/api.js';
 import { Setup } from './screens/Setup/Setup.js';
 import { SignIn } from './screens/SignIn.js';
 import { CrunchyrollLink, type CrStatus } from './screens/Settings/CrunchyrollLink.js';
+import { ImportProgress } from './screens/ImportProgress.js';
 
 /** The browser path, or '/' when rendering outside a browser (unit tests). */
 function currentPath(): string {
@@ -39,7 +40,7 @@ function Home({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   return (
     <Screen kicker="Tonight" title="Up Next">
       {cr !== undefined && !cr.linked && <CrunchyrollLink status={cr} onLinked={setCr} />}
-      {cr?.linked === true && <p className="text-[15px] text-muted">Crunchyroll is linked. Your history imports next.</p>}
+      {cr?.linked === true && <ImportProgress />}
       <p className="text-[13px] text-faint">Signed in as {name}.</p>
       <Button kind="ghost" onClick={onSignOut}>Sign out</Button>
     </Screen>

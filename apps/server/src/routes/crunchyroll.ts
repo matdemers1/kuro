@@ -4,11 +4,12 @@ import { CrSidecarError, type CrSidecar } from '../adapters/crunchyroll.js';
 import { requireUser } from '../auth/middleware.js';
 import * as connection from '../cr/connection.js';
 import type { Db } from '../db.js';
+import type { SyncQueue } from '../jobs/queue.js';
 import type { Logger } from '../logger.js';
 
 const LinkBody = z.object({ email: z.string().trim().min(3).max(320), password: z.string().min(1).max(1024) });
 
-export function crunchyrollRoutes(deps: { db: Db; sidecar: CrSidecar; secretKey: string; log: Logger }): Router {
+export function crunchyrollRoutes(deps: { db: Db; sidecar: CrSidecar; secretKey: string; log: Logger; queue?: SyncQueue }): Router {
   const router = Router();
   router.use(requireUser);
 
@@ -29,8 +30,10 @@ export function crunchyrollRoutes(deps: { db: Db; sidecar: CrSidecar; secretKey:
     const userId = req.auth?.userId ?? '';
     connection
       .link(deps, userId, body.data)
-      .then((s) => {
+      .then(async (s) => {
         deps.log.info({ userId }, 'crunchyroll linked');
+        // The first link starts the import at once (KURO-REQ-003); a re-link resumes nightly sync.
+        if (deps.queue !== undefined && s.lastSuccessAt === null) await deps.queue.request(userId, 'backfill');
         res.json(s);
       })
       .catch((err: unknown) => {

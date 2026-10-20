@@ -2,7 +2,7 @@
   "name": "kuro-server",
   "private": true,
   "version": "0.0.0",
-  "description": "Kur\u014d API, jobs and adapters; serves the web app as statics in production",
+  "description": "Kurō API, jobs and adapters; serves the web app as statics in production",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -23,6 +23,7 @@
     "argon2": "^0.45.1",
     "express": "^5.2.1",
     "otpauth": "^9.5.2",
+    "pg-boss": "^11.1.2",
     "pino": "^10.3.1",
     "prisma": "7.10.0",
     "zod": "^4.6.2"
