@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { pino } from 'pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CrSidecar } from '../../src/adapters/crunchyroll.js';
-import { canonicalId, resolveCatalog, type ResolveDeps } from '../../src/cr/resolve.js';
+import { canonicalId, resolveCatalog, resolveMarkers, type ResolveDeps } from '../../src/cr/resolve.js';
 import { seal } from '../../src/crypto/secretbox.js';
 import { createDb, type Db } from '../../src/db.js';
 import { rebuildShows } from '../../src/derive/rebuild.js';
@@ -86,6 +86,8 @@ describe('resolving the catalog (KURO-REQ-011, KURO-REQ-012)', () => {
   });
 
   it('records credits markers where published, and asks for each played episode once', async () => {
+    expect(await resolveMarkers(deps, userId)).toEqual({ checked: 3, markers: 1 });
+    expect((await resolveMarkers(deps, userId)).checked).toBe(0);
     expect((await db.crEpisode.findUniqueOrThrow({ where: { id: 'GEN1' } })).creditsStartS).toBe(1300);
     const without = await db.crEpisode.findUniqueOrThrow({ where: { id: 'GJA1' } });
     expect(without.creditsStartS).toBeNull();

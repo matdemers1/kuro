@@ -57,6 +57,8 @@ afterAll(async () => {
 
 const sidecarDeps = () => ({ db, sidecar: new CrSidecar(`http://127.0.0.1:${String((server.address() as AddressInfo).port)}`), secretKey: SECRET_KEY, log, pauseMs: 0 });
 const pushesWith = (title: string) => delivered.filter((d) => d.payload.includes(title)).length;
+/** Alerts recorded for one connection — other files leave connections behind, so never count globally. */
+const alertsFor = (prefix: string, connId: string) => db.alert.findMany({ where: { key: { startsWith: `${prefix}:${connId}:` } } });
 
 describe('alert dedupe (KURO-REQ-020)', () => {
   it('sends a key once, never twice', async () => {
@@ -75,25 +77,27 @@ describe('alert dedupe (KURO-REQ-020)', () => {
 
 describe('the hourly health check (KURO-REQ-007, 008, 009)', () => {
   it('an expired session pauses sync, shows the re-link state, and pushes once', async () => {
-    const { userId } = await owner('a-expired@example.com', 1);
+    const { userId, connId } = await owner('a-expired@example.com', 1);
     reply = 'expired';
     expect((await runSync(sidecarDeps(), userId, 'delta')).status).toBe('failed');
     expect((await syncHealth(db, userId)).state).toBe('paused');
     await checkAlerts(db, alerts);
     await checkAlerts(db, alerts);
-    expect(pushesWith('session expired')).toBe(1);
+    const sent = await alertsFor('cr-expired', connId);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.delivered).toBe(1);
   });
 
   it('two blocked runs alert once; one does not', async () => {
-    const { userId } = await owner('a-blocked@example.com', 1);
+    const { userId, connId } = await owner('a-blocked@example.com', 1);
     reply = 'blocked';
     await runSync(sidecarDeps(), userId, 'delta');
     await checkAlerts(db, alerts);
-    expect(pushesWith('blocking sync')).toBe(0);
+    expect(await alertsFor('cr-blocked', connId)).toHaveLength(0);
     await runSync(sidecarDeps(), userId, 'delta');
     await checkAlerts(db, alerts);
     await checkAlerts(db, alerts);
-    expect(pushesWith('blocking sync')).toBe(1);
+    expect(await alertsFor('cr-blocked', connId)).toHaveLength(1);
   });
 
   it('stale after 36 hours: 37 hours alerts once and shows the banner state; 35 does not', async () => {
@@ -101,9 +105,9 @@ describe('the hourly health check (KURO-REQ-007, 008, 009)', () => {
     expect((await syncHealth(db, fresh.userId)).stale).toBe(false);
     const stale = await owner('a-37h@example.com', 37);
     expect((await syncHealth(db, stale.userId)).stale).toBe(true);
-    const before = pushesWith('stale');
     await checkAlerts(db, alerts);
     await checkAlerts(db, alerts);
-    expect(pushesWith('stale') - before).toBe(1);
+    expect(await alertsFor('stale', stale.connId)).toHaveLength(1);
+    expect(await alertsFor('stale', fresh.connId)).toHaveLength(0);
   });
 });
