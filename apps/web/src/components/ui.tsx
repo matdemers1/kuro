@@ -13,13 +13,31 @@ export function Button({ kind = 'primary', className = '', ...props }: ButtonHTM
   );
 }
 
-export function Field({ label, hint, error, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string; error?: string | undefined }) {
+/**
+ * A labelled input. `notCredential` marks a field password managers must leave alone — the setup
+ * token, a third-party password — so it is never saved as this site's login (they treat any
+ * `type="password"` field as one, whatever `autocomplete` says). `masked` hides what is typed without
+ * being a password field.
+ */
+export function Field({
+  label,
+  hint,
+  error,
+  notCredential = false,
+  masked = false,
+  className = '',
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string; error?: string | undefined; notCredential?: boolean; masked?: boolean }) {
+  const ignore = notCredential
+    ? { autoComplete: 'off', autoCorrect: 'off', autoCapitalize: 'none', spellCheck: false, 'data-1p-ignore': 'true', 'data-lpignore': 'true', 'data-bwignore': 'true', 'data-form-type': 'other' }
+    : {};
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium tracking-[0.6px] text-muted uppercase">{label}</span>
       <input
-        className="min-h-12 rounded-[10px] border border-line-strong bg-raised px-3 text-[15px] text-ink placeholder:text-faint focus:border-kin focus:outline-none"
+        className={`min-h-12 rounded-[10px] border border-line-strong bg-raised px-3 text-[15px] text-ink placeholder:text-faint focus:border-kin focus:outline-none ${masked ? '[-webkit-text-security:disc]' : ''} ${className}`}
         {...props}
+        {...ignore}
       />
       {hint !== undefined && <span className="text-[13px] text-faint">{hint}</span>}
       {error !== undefined && (

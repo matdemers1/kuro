@@ -50,8 +50,8 @@ export function CrunchyrollLink({ status, onLinked }: { status: CrStatus; onLink
         Kurō signs in once to read your watch history. Your password is used for this one exchange and then discarded — only an encrypted session token is kept.
       </p>
       <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)} aria-label="Link Crunchyroll">
-        <Field label="Crunchyroll email" type="email" autoComplete="off" required value={email} onChange={(e) => { setEmail(e.target.value); }} />
-        <Field label="Crunchyroll password" type="password" autoComplete="off" required value={password} onChange={(e) => { setPassword(e.target.value); }} />
+        <Field label="Crunchyroll email" type="text" inputMode="email" name="cr-email" notCredential required value={email} onChange={(e) => { setEmail(e.target.value); }} />
+        <Field label="Crunchyroll password" type="text" name="cr-secret" notCredential masked required value={password} onChange={(e) => { setPassword(e.target.value); }} />
         {error !== undefined && <p role="alert" className="text-[13px] text-shu">{error}</p>}
         <Button type="submit" disabled={busy}>{status.linked ? 'Re-link' : 'Link and import history'}</Button>
       </form>
