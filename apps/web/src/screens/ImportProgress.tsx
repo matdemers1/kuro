@@ -76,6 +76,7 @@ export function ImportProgress({ onDerived }: { onDerived?: () => void }) {
             {String(state?.plays ?? 0)} plays in your vault
             {run.status === 'succeeded' && !matching && run.finishedAt !== null ? ` · last sync ${new Date(run.finishedAt).toLocaleString()}` : ''}
           </p>
+          {run.status === 'succeeded' && run.error !== null && <p className="text-[13px] text-faint">{run.error}</p>}
           {run.status === 'failed' && <p role="alert" className="text-[13px] text-shu">Sync stopped: {run.error ?? 'unknown error'}. It resumes from where it stopped.</p>}
           {running && run.kind === 'backfill' && <p className="text-[13px] text-faint">Paced to stay gentle on Crunchyroll. Safe to close — it resumes from the last page.</p>}
         </>
