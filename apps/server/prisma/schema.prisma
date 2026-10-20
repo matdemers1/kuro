@@ -278,6 +278,8 @@ model CrEpisode {
   skipCheckedAt  DateTime? @map("skip_checked_at") @db.Timestamptz(6)
   /// One Canonical Episode regardless of dub; set by resolve in KURO-T-1.4.
   canonicalId    String?   @map("canonical_id")
+  /// Every audio language this episode is out in, from its versions — what dub lag counts (KURO-T-3.3).
+  audioLocales   String[]  @default([]) @map("audio_locales")
   raw            Json
   fetchedAt      DateTime  @default(now()) @map("fetched_at") @db.Timestamptz(6)
 
@@ -323,6 +325,8 @@ model ShowState {
   nextIsNew       Boolean    @default(false) @map("next_is_new")
   /// The next episode is in a later season than the last one watched.
   nextIsNewSeason Boolean    @default(false) @map("next_is_new_season")
+  /// Episodes out in the original but not yet in the owner's dub, after the last dubbed one.
+  dubLag          Int        @default(0) @map("dub_lag")
   lastPlayedAt    DateTime?  @map("last_played_at") @db.Timestamptz(6)
   derivedAt       DateTime   @map("derived_at") @db.Timestamptz(6)
 

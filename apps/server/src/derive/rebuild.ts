@@ -109,6 +109,7 @@ export async function loadShows(db: Db, userId: string, only?: string): Promise<
             airDate: e.airDate,
             creditsStartS: e.creditsStartS,
             seasonId: season.id,
+            locales: e.audioLocales,
           };
           const n = e.episodeNumber;
           const range = n === null ? undefined : ranges.find((r) => n >= r.epFrom && n <= r.epTo);

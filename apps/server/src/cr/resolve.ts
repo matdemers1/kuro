@@ -13,6 +13,11 @@ import * as connection from './connection.js';
 
 const SERIES_TTL_MS = 20 * 60 * 60 * 1000;
 const RECENT_MS = 90 * 24 * 60 * 60 * 1000;
+/**
+ * Every series is looked at again weekly, however long ago it was watched: that is how a new season
+ * or dub of a Completed Show is found and brings it back to Up Next (KURO-T-3.3).
+ */
+const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const Version = z.object({ guid: z.string(), original: z.boolean().catch(false), audio_locale: z.string().nullish() });
 const Episode = z.object({
@@ -71,9 +76,10 @@ export async function resolveCatalog(deps: ResolveDeps, userId: string, now = ne
   const due = parents.filter((p) => {
     const fetched = known.get(p.crParentId);
     if (fetched === undefined) return true;
-    // Series watched lately are refreshed daily, so new episodes and seasons show up.
+    // Series watched lately are refreshed daily, so new episodes and seasons show up; the rest weekly.
     const recent = (p._max.datePlayed?.getTime() ?? 0) > now.getTime() - RECENT_MS;
-    return recent && fetched.getTime() < now.getTime() - SERIES_TTL_MS;
+    const age = now.getTime() - fetched.getTime();
+    return age > (recent ? SERIES_TTL_MS : WEEKLY_MS);
   });
 
   let episodes = 0;
@@ -111,6 +117,7 @@ export async function resolveCatalog(deps: ResolveDeps, userId: string, now = ne
           sequenceNumber: e.sequence_number,
           durationS: Math.round(e.duration_ms / 1000),
           audioLocale: e.audio_locale ?? s.audio_locale ?? null,
+          audioLocales: [...new Set([...(e.versions ?? []).flatMap((v) => (v.audio_locale ? [v.audio_locale] : [])), ...(e.audio_locale ? [e.audio_locale] : [])])],
           airDate: e.episode_air_date ? new Date(e.episode_air_date) : null,
           canonicalId: canonicalId(e),
           raw: rawEpisode as object,

@@ -103,3 +103,49 @@ describe('determinism (KURO-REQ-017)', () => {
     expect(deriveShow([...eps].reverse(), [...plays].reverse(), NOW)).toEqual(deriveShow(eps, plays, NOW));
   });
 });
+
+describe('dub first (KURO-T-3.3)', () => {
+  /** One season of ten in Japanese; the English dub is out to episode `dubbed`. */
+  function simulcast(dubbed: number): EpisodeIn[] {
+    const out: EpisodeIn[] = [];
+    for (let n = 1; n <= 10; n++) {
+      const canonicalId = `SJ${String(n)}`;
+      const base = { canonicalId, seasonNumber: 1, seasonSequence: 1, sequenceNumber: n, episodeNumber: n, durationS: 1440, creditsStartS: 1300, airDate: ago(30 - n) };
+      // Crunchyroll lists the season once; each episode's versions say which dubs it is out in.
+      out.push({ ...base, id: n <= dubbed ? `SE${String(n)}` : canonicalId, title: `Ep ${String(n)}`, audioLocale: n <= dubbed ? 'en-US' : 'ja-JP', locales: n <= dubbed ? ['ja-JP', 'en-US'] : ['ja-JP'] });
+    }
+    return out;
+  }
+  const dubPlays = (to: number) => Array.from({ length: to }, (_, i) => play(`SE${String(i + 1)}`, 10 - i * 0.5));
+
+  it('watching the dub, caught up with it: Caught up, "dub 2 behind", not in Up Next', () => {
+    const s = deriveShow(simulcast(8), dubPlays(8), NOW);
+    expect(s).toMatchObject({ status: 'caught_up', dubLag: 2, nextCrEpisodeId: 'SJ9' });
+    expect(upNext([{ showKey: 'cr:SIM', status: s.status, pinned: false, nextIsNew: s.nextIsNew, nextIsNewSeason: s.nextIsNewSeason, lastPlayedAt: s.lastPlayedAt, nextCrEpisodeId: s.nextCrEpisodeId }])).toEqual([]);
+  });
+
+  it('the next dub episode lands: Watching again, one behind', () => {
+    expect(deriveShow(simulcast(9), dubPlays(8), NOW)).toMatchObject({ status: 'watching', dubLag: 1, nextCrEpisodeId: 'SE9' });
+  });
+
+  it('watching in Japanese: no dub lag, the next episode is simply next', () => {
+    const subPlays = Array.from({ length: 8 }, (_, i) => play(`SJ${String(i + 1)}`, 10 - i * 0.5));
+    const eps = simulcast(0);
+    expect(deriveShow(eps, subPlays, NOW)).toMatchObject({ status: 'watching', dubLag: 0, nextCrEpisodeId: 'SJ9' });
+  });
+
+  it('a show with no dub at all is never "behind"', () => {
+    expect(deriveShow(simulcast(0), [play('SJ1', 1)], NOW).dubLag).toBe(0);
+  });
+});
+
+describe('a new season brings a finished Show back (KURO-T-3.3)', () => {
+  it('Season 1 finished months ago, Season 2 now out: Watching, NEXT SEASON in Up Next', () => {
+    const eps = show(2, 3).filter((e) => e.seasonNumber === 1 || e.audioLocale === 'en-US').map((e) => (e.seasonNumber === 2 ? { ...e, airDate: ago(2) } : e));
+    const done = deriveShow(eps.filter((e) => e.seasonNumber === 1), [play('EN11', 100), play('EN12', 99), play('EN13', 98)], NOW);
+    expect(done.status).toBe('completed');
+    const back = deriveShow(eps, [play('EN11', 100), play('EN12', 99), play('EN13', 98)], NOW);
+    expect(back).toMatchObject({ status: 'watching', nextIsNewSeason: true, nextIsNew: true, nextCrEpisodeId: 'EN21' });
+    expect(upNext([{ showKey: 'cr:BACK', status: back.status, pinned: false, nextIsNew: back.nextIsNew, nextIsNewSeason: back.nextIsNewSeason, lastPlayedAt: back.lastPlayedAt, nextCrEpisodeId: back.nextCrEpisodeId }])).toEqual([{ showKey: 'cr:BACK', group: 'next_season' }]);
+  });
+});

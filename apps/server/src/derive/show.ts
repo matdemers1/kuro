@@ -29,6 +29,8 @@ export interface EpisodeIn {
   readonly rank?: readonly [number, number];
   /** The Crunchyroll season it is in; with rank, what "a new season" means. */
   readonly seasonId?: string;
+  /** Every audio language it is out in (its versions): what dub lag counts. */
+  readonly locales?: readonly string[];
 }
 
 export interface PlayIn {
@@ -63,6 +65,8 @@ export interface ShowOut {
   readonly nextIsNew: boolean;
   readonly nextIsNewSeason: boolean;
   readonly lastPlayedAt: Date | null;
+  /** Episodes out in the original but not yet in the owner's dub, after the last dubbed one. */
+  readonly dubLag: number;
 }
 
 /** Watched: Crunchyroll says so, or the playhead passed the credits, or 90% with no marker (KURO-REQ-011). */
@@ -164,9 +168,26 @@ export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayI
   const nextIsNewSeason =
     next !== undefined && current !== undefined && (matched ? next.primary.seasonId !== current.primary.seasonId && compareRank(next.primary.rank, current.primary.rank) > 0 : next.primary.seasonNumber > current.primary.seasonNumber);
 
+  // Dub first (KURO-T-3.3): watching in a dub, an episode not yet out in it is not "next" — the Show
+  // is waiting on the dub, Caught up, and says how far behind the dub is.
+  const dubbing = locale !== null && !ORIGINAL_LOCALES.has(locale) && ordered.some((c) => inLocale(c, locale));
+  let lastDubbed = -1;
+  if (dubbing) ordered.forEach((c, i) => { if (inLocale(c, locale)) lastDubbed = i; });
+  const dubLag = dubbing ? ordered.length - 1 - lastDubbed : 0;
+  const waitingForDub = dubbing && next !== undefined && !inLocale(next, locale);
+
   const watchedCount = ordered.filter((c) => watched.has(c.id)).length;
   const status = deriveStatus(
-    { total: ordered.length, watched: watchedCount, nextAvailable: next !== undefined, nextIsNew, lastPlayedAt, moreComing: options.moreComing ?? false, rewatching, manual: options.manual ?? null },
+    {
+      total: ordered.length,
+      watched: watchedCount,
+      nextAvailable: next !== undefined && !waitingForDub,
+      nextIsNew,
+      lastPlayedAt,
+      moreComing: (options.moreComing ?? false) || waitingForDub,
+      rewatching,
+      manual: options.manual ?? null,
+    },
     now,
   );
 
@@ -185,7 +206,15 @@ export function deriveShow(episodes: readonly EpisodeIn[], plays: readonly PlayI
     nextIsNew,
     nextIsNewSeason,
     lastPlayedAt,
+    dubLag,
   };
+}
+
+/** Languages a show is made in; watching in any other is watching a dub. */
+const ORIGINAL_LOCALES = new Set(['ja-JP', 'zh-CN', 'ko-KR']);
+
+function inLocale(c: Canonical, locale: string): boolean {
+  return c.versions.some((v) => v.audioLocale === locale || (v.locales ?? []).includes(locale));
 }
 
 export interface UpNextRow {
@@ -207,8 +236,8 @@ export type UpNextGroup = 'pinned' | 'new' | 'recent' | 'next_season' | 'paused'
  */
 export function upNext(rows: readonly UpNextRow[]): { showKey: string; group: UpNextGroup }[] {
   const groupOf = (r: UpNextRow): UpNextGroup | null => {
-    // Nothing to watch next, or the owner set it aside: not in Up Next.
-    if (r.nextCrEpisodeId === null || r.status === 'dropped' || r.status === 'plan_to_watch') return null;
+    // Nothing to watch next, waiting on a dub, or set aside by the owner: not in Up Next.
+    if (r.nextCrEpisodeId === null || r.status === 'dropped' || r.status === 'plan_to_watch' || r.status === 'caught_up') return null;
     if (r.pinned) return 'pinned';
     if (r.status === 'paused') return 'paused';
     if (r.nextIsNewSeason) return 'next_season';

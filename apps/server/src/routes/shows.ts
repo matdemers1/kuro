@@ -78,6 +78,7 @@ export function showRoutes(db: Db): Router {
         watchedEpisodes: state.watchedEpisodes,
         totalEpisodes: state.totalEpisodes,
         remainingS: state.remainingS,
+        dubLag: state.dubLag,
         next: state.nextCrEpisodeId === null ? null : { season: state.nextSeason, episode: state.nextEpisode, title: state.nextTitle, audioLocale: state.nextAudioLocale, watchUrl: `https://www.crunchyroll.com/watch/${state.nextCrEpisodeId}` },
         items: inputs.show.items.flatMap((i) => {
           const e = entries.get(i.entryId);
