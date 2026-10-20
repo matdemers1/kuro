@@ -21,6 +21,9 @@ const Linked = z.object({ refreshToken: z.string().min(1), accountId: z.string()
 const Page = z.object({ refreshToken: z.string().min(1), total: z.number().nullable(), items: z.array(z.record(z.string(), z.unknown())) });
 const Failure = z.object({ error: z.enum(['expired', 'blocked', 'upstream', 'bad_input']), message: z.string() });
 
+const Cms = z.object({ refreshToken: z.string().min(1), body: z.record(z.string(), z.unknown()) });
+const Skip = z.object({ events: z.record(z.string(), z.unknown()).nullable() });
+
 export type LinkResult = z.infer<typeof Linked>;
 export type HistoryPage = z.infer<typeof Page>;
 
@@ -52,6 +55,16 @@ export class CrSidecar {
   /** The password is passed straight through and never kept (KURO-ADR-001). */
   linkWithPassword(email: string, password: string, deviceId: string): Promise<LinkResult> {
     return this.post('/session/password', { email, password, deviceId }, Linked);
+  }
+
+  /** A read-only catalog path under /content/v2/cms (the sidecar enforces an allowlist). */
+  cms(input: { refreshToken: string; deviceId: string; path: string }): Promise<z.infer<typeof Cms>> {
+    return this.post('/cms', input, Cms);
+  }
+
+  /** Crunchyroll's public intro/credits markers, or null when none are published. */
+  async skipEvents(episodeId: string): Promise<Record<string, unknown> | null> {
+    return (await this.post('/skip-events', { episodeId }, Skip)).events;
   }
 
   historyPage(input: { refreshToken: string; deviceId: string; accountId: string; page: number; pageSize?: number }): Promise<HistoryPage> {

@@ -1,5 +1,6 @@
 import PgBoss from 'pg-boss';
 import type { Logger } from '../logger.js';
+import { resolveCatalog } from '../cr/resolve.js';
 import { runSync, type SyncDeps, type SyncKind } from '../sync/run.js';
 
 /**
@@ -35,6 +36,12 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
     if (job === undefined) return;
     const outcome = await runSync(deps, job.data.userId, job.data.kind);
     log.info({ kind: job.data.kind, status: outcome.status }, 'sync job finished');
+    // What the new plays point at: series, seasons, episodes, dub folding and credits markers.
+    if (outcome.status === 'succeeded') {
+      await resolveCatalog(deps, job.data.userId).catch((err: unknown) => {
+        log.warn({ err: err instanceof Error ? err.message : String(err) }, 'catalog resolve failed; it retries after the next sync');
+      });
+    }
   });
   // Nightly: a delta for every linked owner — or the backfill, if one has never finished.
   await boss.createQueue(NIGHTLY);

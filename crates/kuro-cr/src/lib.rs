@@ -3,6 +3,7 @@
 //! It holds no state: the server passes the session on every call and persists the rotated
 //! refresh token that comes back. It listens only on the compose network (KURO-REQ-056).
 
+pub mod catalog;
 pub mod cr;
 
 use axum::extract::State;
@@ -120,11 +121,55 @@ async fn history<C: Cr>(
     ))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CmsBody {
+    pub refresh_token: String,
+    pub device_id: String,
+    pub path: String,
+}
+
+async fn cms<C: Cr>(
+    State(cr): State<Arc<C>>,
+    Json(body): Json<CmsBody>,
+) -> Result<impl IntoResponse, CrError> {
+    non_empty(&[
+        ("refreshToken", &body.refresh_token),
+        ("deviceId", &body.device_id),
+    ])?;
+    let path = catalog::allowed_cms_path(&body.path)
+        .ok_or_else(|| CrError::BadInput("that catalog path is not one Kurō reads".into()))?;
+    let result = cr.cms(body.refresh_token, body.device_id, path).await?;
+    Ok(Json(
+        json!({ "refreshToken": result.refresh_token, "body": result.body }),
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkipBody {
+    pub episode_id: String,
+}
+
+async fn skip_events<C: Cr>(
+    State(cr): State<Arc<C>>,
+    Json(body): Json<SkipBody>,
+) -> Result<impl IntoResponse, CrError> {
+    if !catalog::is_episode_id(&body.episode_id) {
+        return Err(CrError::BadInput("not an episode id".into()));
+    }
+    Ok(Json(
+        json!({ "events": cr.skip_events(body.episode_id).await? }),
+    ))
+}
+
 pub fn router<C: Cr>(cr: Arc<C>) -> Router {
     Router::new()
         .route("/healthz", get(healthz))
         .route("/session/password", post(link::<C>))
         .route("/history", post(history::<C>))
+        .route("/cms", post(cms::<C>))
+        .route("/skip-events", post(skip_events::<C>))
         .with_state(cr)
 }
 
@@ -141,6 +186,20 @@ mod tests {
     struct FakeCr;
 
     impl Cr for FakeCr {
+        async fn cms(
+            &self,
+            rt: String,
+            _d: String,
+            path: String,
+        ) -> Result<cr::CmsResult, CrError> {
+            Ok(cr::CmsResult {
+                refresh_token: format!("{rt}-rotated"),
+                body: json!({ "path": path }),
+            })
+        }
+        async fn skip_events(&self, id: String) -> Result<Option<Value>, CrError> {
+            Ok((id == "GEPWITH").then(|| json!({ "credits": { "start": 1300.5, "end": 1390.0 } })))
+        }
         async fn link_with_password(
             &self,
             email: String,
@@ -260,6 +319,37 @@ mod tests {
             (s2, b2["error"].as_str()),
             (StatusCode::UNAUTHORIZED, Some("expired"))
         );
+    }
+
+    #[tokio::test]
+    async fn cms_passes_allowed_paths_and_refuses_the_rest() {
+        let (s, b) = call(
+            "/cms",
+            json!({ "refreshToken": "rt", "deviceId": "d", "path": "seasons/GYQ4/episodes" }),
+        )
+        .await;
+        assert_eq!(s, 200);
+        assert_eq!(b["body"]["path"], "seasons/GYQ4/episodes");
+        assert_eq!(b["refreshToken"], "rt-rotated");
+        let (s, b) = call(
+            "/cms",
+            json!({ "refreshToken": "rt", "deviceId": "d", "path": "../accounts/v1/me" }),
+        )
+        .await;
+        assert_eq!(
+            (s, b["error"].as_str()),
+            (StatusCode::BAD_REQUEST, Some("bad_input"))
+        );
+    }
+
+    #[tokio::test]
+    async fn skip_events_returns_markers_or_null() {
+        let (_, b) = call("/skip-events", json!({ "episodeId": "GEPWITH" })).await;
+        assert_eq!(b["events"]["credits"]["start"], 1300.5);
+        let (_, b) = call("/skip-events", json!({ "episodeId": "GEPNONE" })).await;
+        assert!(b["events"].is_null());
+        let (s, _) = call("/skip-events", json!({ "episodeId": "../x" })).await;
+        assert_eq!(s, 400);
     }
 
     #[tokio::test]
