@@ -520,3 +520,16 @@ model ShowItem {
   @@index([catalogEntryId])
   @@map("show_item")
 }
+
+/// The owner's corrections to grouping (KURO-T-2.6): merge, split, reorder, attach. Inputs to
+/// derivation — anchored on Crunchyroll series and catalog entries, so they survive every sync and
+/// catalog import — applied in order of creation.
+model Override {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// merge, split, reorder or attach.
+  kind      String
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("override")
+}

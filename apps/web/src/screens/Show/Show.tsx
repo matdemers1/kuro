@@ -5,6 +5,7 @@ import { Button } from '../../components/ui.js';
 import { api } from '../../lib/api.js';
 import { audio, hours, se, statusLabel } from '../../lib/format.js';
 import { navigate } from '../../lib/router.js';
+import { GroupingEditor } from '../GroupingEditor/GroupingEditor.js';
 
 interface Episode {
   crEpisodeId: string;
@@ -35,6 +36,7 @@ interface ShowDetail {
   items?: { entryId: string; kind: 'season' | 'extra'; required: boolean; title: string; type: string; episodes: number; year: number | null }[];
   extras?: Episode[];
   franchise?: { showKey: string; title: string }[];
+  seriesIds?: string[];
 }
 
 /** One episode row; past your position the title stays hidden until tapped (KURO-REQ-018). */
@@ -67,6 +69,8 @@ const tabOf = (e: Episode) => e.seasonId ?? `S${String(e.seasonNumber)}`;
 
 export function Show({ showKey }: { showKey: string }) {
   const [show, setShow] = useState<ShowDetail | null>();
+  const [editing, setEditing] = useState(false);
+  const [reload, setReload] = useState(0);
   const [season, setSeason] = useState<string>();
   useEffect(() => {
     void api<ShowDetail>(`/api/shows/${encodeURIComponent(showKey)}`).then(
@@ -77,7 +81,7 @@ export function Show({ showKey }: { showKey: string }) {
       },
       () => { setShow(null); },
     );
-  }, [showKey]);
+  }, [showKey, reload]);
 
   if (show === undefined) return <main aria-busy="true" className="min-h-dvh bg-canvas" />;
   if (show === null) return <main className="p-6 text-muted">That show isn’t in your history.</main>;
@@ -145,6 +149,20 @@ export function Show({ showKey }: { showKey: string }) {
               ))}
             </ol>
           </section>
+        )}
+        {(show.items?.length ?? 0) > 0 && !editing && (
+          <Button kind="ghost" className="self-start" onClick={() => { setEditing(true); }}>Edit grouping</Button>
+        )}
+        {editing && (
+          <GroupingEditor
+            showKey={show.showKey}
+            seriesIds={show.seriesIds ?? []}
+            items={show.items ?? []}
+            onChanged={(key) => {
+              if (key !== showKey) navigate(`/show/${encodeURIComponent(key)}`);
+              else setReload((n) => n + 1);
+            }}
+          />
         )}
         {tabs.length > 1 && (
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="Seasons">

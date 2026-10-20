@@ -93,3 +93,63 @@ describe('groupShows (KURO-T-2.5)', () => {
     expect(g.shows.map((s) => [s.key, s.items.length])).toEqual([['cr:LOST', 0]]);
   });
 });
+
+describe('the owner’s overrides (KURO-T-2.6)', () => {
+  const s1 = e('ov-s1', 'TV', 12, 2018, 1);
+  const s2 = e('ov-s2', 'TV', 12, 2020, 1);
+  const movie = e('ov-movie', 'MOVIE', 1, 2019, 1);
+  const other = e('ov-other', 'TV', 12, 2021, 1);
+  const base = () => ({
+    series: [{ id: 'A', title: 'Show A' }, { id: 'M', title: 'Show A: The Movie' }, { id: 'O', title: 'Other Show' }],
+    ranges: [range('A', 'A1', 'ov-s1'), range('A', 'A2', 'ov-s2'), range('M', 'M1', 'ov-movie'), range('O', 'O1', 'ov-other')],
+    entries: entries(s1, s2, movie, other),
+    relations: [...seq(s1, s2), { from: s1.anilistId ?? 0, to: movie.anilistId ?? 0, type: 'SIDE_STORY' }],
+  });
+  const run = (...overrides: Parameters<typeof groupShows>[4] & object) => {
+    const b = base();
+    return groupShows(b.series, b.ranges, b.entries, b.relations, overrides);
+  };
+
+  it('without overrides: Show A with two seasons, the movie on its own, Other on its own', () => {
+    expect(run().shows.map((s) => [s.key, s.items.map((i) => i.entryId)])).toEqual([
+      ['show:ov-movie', ['ov-movie']],
+      ['show:ov-other', ['ov-other']],
+      ['show:ov-s1', ['ov-s1', 'ov-s2']],
+    ]);
+  });
+
+  it('merge: two series the owner says are one Show', () => {
+    const g = run({ kind: 'merge', seriesIds: ['A', 'O'] });
+    expect(g.shows.find((s) => s.key === 'show:ov-s1')?.items.map((i) => i.entryId)).toEqual(['ov-s1', 'ov-s2', 'ov-other']);
+    expect(g.shows.some((s) => s.key === 'show:ov-other')).toBe(false);
+  });
+
+  it('split: season 2 becomes a Show of its own', () => {
+    const g = run({ kind: 'split', entryIds: ['ov-s2'] });
+    expect(g.shows.find((s) => s.key === 'show:ov-s1')?.items.map((i) => i.entryId)).toEqual(['ov-s1']);
+    expect(g.shows.find((s) => s.key === 'show:ov-s2')).toMatchObject({ title: 'Show A', seriesIds: ['A'] });
+  });
+
+  it('attach: the standalone movie becomes an optional Extra after season 1', () => {
+    const g = run({ kind: 'attach', entryId: 'ov-movie', afterEntryId: 'ov-s1' });
+    expect(g.shows.find((s) => s.key === 'show:ov-s1')?.items.map((i) => [i.entryId, i.kind, i.required])).toEqual([
+      ['ov-s1', 'season', true],
+      ['ov-movie', 'extra', false],
+      ['ov-s2', 'season', true],
+    ]);
+    expect(g.shows.some((s) => s.key === 'show:ov-movie')).toBe(false);
+    expect(g.kindOfEntry.get('ov-movie')).toBe('extra');
+  });
+
+  it('reorder: the owner’s order, and the key stays the earliest season so pins survive', () => {
+    const g = run({ kind: 'attach', entryId: 'ov-movie', afterEntryId: 'ov-s1' }, { kind: 'reorder', entryIds: ['ov-s1', 'ov-s2', 'ov-movie'] });
+    const a = g.shows.find((s) => s.key === 'show:ov-s1');
+    expect(a?.items.map((i) => [i.entryId, i.position])).toEqual([['ov-s1', 0], ['ov-s2', 1], ['ov-movie', 2]]);
+    const flipped = run({ kind: 'reorder', entryIds: ['ov-s2', 'ov-s1'] });
+    expect(flipped.shows.find((s) => s.items[0]?.entryId === 'ov-s2')?.key).toBe('show:ov-s1');
+  });
+
+  it('an override naming something that no longer exists is ignored, not an error', () => {
+    expect(run({ kind: 'split', entryIds: ['gone'] }, { kind: 'attach', entryId: 'gone', afterEntryId: 'ov-s1' }, { kind: 'merge', seriesIds: ['A', 'GONE'] }).shows).toHaveLength(3);
+  });
+});

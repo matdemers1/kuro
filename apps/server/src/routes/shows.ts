@@ -42,6 +42,15 @@ export function showRoutes(db: Db): Router {
     })().catch(next);
   });
 
+  /** The Show holding a catalog entry now — where to go after a merge or split re-keys one. */
+  router.get('/by-entry/:entryId', (req, res, next) => {
+    void (async () => {
+      const item = await db.showItem.findFirst({ where: { catalogEntryId: req.params['entryId'] }, select: { showKey: true } });
+      if (item === null) res.status(404).json({ error: 'no show holds that entry' });
+      else res.json({ showKey: item.showKey });
+    })().catch(next);
+  });
+
   router.get('/:key', (req, res, next) => {
     const key = req.params['key'];
     if (!key.startsWith('cr:') && !key.startsWith('show:')) {
@@ -74,6 +83,7 @@ export function showRoutes(db: Db): Router {
           const e = entries.get(i.entryId);
           return e === undefined ? [] : [{ entryId: i.entryId, kind: i.kind, required: i.required, title: e.title, type: e.type, episodes: e.episodes, year: e.seasonYear, hasPicture: e.picture !== null }];
         }),
+        seriesIds: inputs.show.seriesIds,
         franchise: franchise.filter((f) => f.showKey !== key).map((f) => ({ showKey: f.showKey, title: f.title })),
         episodes: episodeList(inputs.main, inputs.plays).map((e) => ({ ...e, lastWatchedAt: e.lastWatchedAt?.toISOString() ?? null, watchUrl: `https://www.crunchyroll.com/watch/${e.crEpisodeId}` })),
         extras: episodeList(inputs.extras, inputs.plays).map((e) => ({ ...e, spoiler: false, isNext: false, watched: watchedExtras.has(e.crEpisodeId), lastWatchedAt: e.lastWatchedAt?.toISOString() ?? null, watchUrl: `https://www.crunchyroll.com/watch/${e.crEpisodeId}` })),
