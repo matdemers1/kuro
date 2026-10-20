@@ -22,6 +22,7 @@ export function You({ name, onSignOut }: { name: string; onSignOut: () => void }
       {cr !== undefined && <CrunchyrollLink status={cr} onLinked={setCr} />}
       {toReview !== undefined && toReview > 0 && <Button onClick={() => { navigate('/review'); }}>Match review · {toReview} to check</Button>}
       {cr?.linked === true && <RewatchQueue />}
+      {cr?.linked === true && <Button kind="ghost" onClick={() => { navigate('/you/taste'); }}>Your taste</Button>}
       <Button kind="ghost" onClick={() => { navigate('/you/changes'); }}>Change log</Button>
       <p className="text-[13px] text-faint">Signed in as {name}.</p>
       <Button kind="ghost" onClick={onSignOut}>Sign out</Button>

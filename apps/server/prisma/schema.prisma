@@ -444,6 +444,8 @@ model CatalogEntry {
   studios     String[]
   anilistId   Int?      @map("anilist_id")
   malId       Int?      @map("mal_id")
+  /// The release's mean score across providers, 1–10: the recommender's quality prior (KURO-T-4.4).
+  score       Float?
   /// Absent from the newest release: kept, so mappings to it surface for a remap instead of breaking.
   retiredAt   DateTime? @map("retired_at") @db.Timestamptz(6)
   releaseId   String    @map("release_id") @db.Uuid
@@ -628,4 +630,24 @@ model RewatchQueueItem {
 
   @@index([position])
   @@map("rewatch_queue")
+}
+
+/// A recommendation the owner said Not interested to (KURO-REQ-046): hidden from Discover and season
+/// picks, and its tags and studios weigh similar Shows down.
+model RecDismissal {
+  catalogEntryId String   @id @map("catalog_entry_id")
+  at             DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("rec_dismissal")
+}
+
+/// The owner's edit to one term of the taste profile (KURO-REQ-048): `tag:<name>` or `studio:<name>`,
+/// boosted, lowered or muted. Absent means the term weighs what the history says.
+model TasteTerm {
+  term      String   @id
+  /// boost | lower | mute
+  adjust    String
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("taste_term")
 }

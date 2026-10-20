@@ -6,6 +6,8 @@ import { SignIn } from './screens/SignIn.js';
 import { usePath } from './lib/router.js';
 import { Library } from './screens/Library.js';
 import { Show } from './screens/Show/Show.js';
+import { Discover } from './screens/Discover.js';
+import { TasteProfile } from './screens/TasteProfile.js';
 import { ThisSeason } from './screens/ThisSeason.js';
 import { UpNext } from './screens/UpNext.js';
 import { You } from './screens/You.js';
@@ -47,6 +49,8 @@ function Signed({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   else if (path === '/library') screen = <Library />;
   else if (path === '/you') screen = <You name={name} onSignOut={onSignOut} />;
   else if (path === '/you/changes') screen = <ChangeLog />;
+  else if (path === '/you/taste') screen = <TasteProfile />;
+  else if (path === '/discover') screen = <Discover />;
   else if (path === '/review') screen = <Review />;
   else if (path.startsWith('/franchise/')) screen = <Franchise franchiseKey={decodeURIComponent(path.slice('/franchise/'.length))} />;
   else screen = <UpNext />;

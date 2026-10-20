@@ -37,6 +37,7 @@ const Raw = z.object({
   relatedAnime: z.array(z.string()).catch([]),
   tags: z.array(z.string()).catch([]),
   studios: z.array(z.string()).catch([]),
+  score: z.object({ arithmeticMean: z.number() }).partial().nullish().catch(null),
 });
 
 export interface CatalogRow {
@@ -57,6 +58,7 @@ export interface CatalogRow {
   studios: string[];
   anilist_id: number | null;
   mal_id: number | null;
+  score: number | null;
 }
 
 const idFrom = (sources: readonly string[], pattern: RegExp): number | null => {
@@ -94,6 +96,7 @@ export function normalise(raw: unknown): Omit<CatalogRow, 'id'> | null {
     studios: r.studios,
     anilist_id: idFrom(r.sources, ANILIST),
     mal_id: idFrom(r.sources, MAL),
+    score: r.score?.arithmeticMean ?? null,
   };
 }
 
@@ -106,18 +109,18 @@ export function freshId(row: Omit<CatalogRow, 'id'>): string {
 
 const UPSERT = `
 INSERT INTO catalog_entry (id, title, type, episodes, status, season, season_year, duration_s, picture, thumbnail,
-                           synonyms, sources, related, tags, studios, anilist_id, mal_id, retired_at, release_id, updated_at)
+                           synonyms, sources, related, tags, studios, anilist_id, mal_id, score, retired_at, release_id, updated_at)
 SELECT x.id, x.title, x.type, x.episodes, x.status, x.season, x.season_year, x.duration_s, x.picture, x.thumbnail,
-       x.synonyms, x.sources, x.related, x.tags, x.studios, x.anilist_id, x.mal_id, NULL, $2::uuid, now()
+       x.synonyms, x.sources, x.related, x.tags, x.studios, x.anilist_id, x.mal_id, x.score, NULL, $2::uuid, now()
 FROM jsonb_to_recordset($1::jsonb) AS x(id text, title text, type text, episodes int, status text, season text,
      season_year int, duration_s int, picture text, thumbnail text, synonyms text[], sources text[], related text[],
-     tags text[], studios text[], anilist_id int, mal_id int)
+     tags text[], studios text[], anilist_id int, mal_id int, score double precision)
 ON CONFLICT (id) DO UPDATE SET
   title = EXCLUDED.title, type = EXCLUDED.type, episodes = EXCLUDED.episodes, status = EXCLUDED.status,
   season = EXCLUDED.season, season_year = EXCLUDED.season_year, duration_s = EXCLUDED.duration_s,
   picture = EXCLUDED.picture, thumbnail = EXCLUDED.thumbnail, synonyms = EXCLUDED.synonyms, sources = EXCLUDED.sources,
   related = EXCLUDED.related, tags = EXCLUDED.tags, studios = EXCLUDED.studios, anilist_id = EXCLUDED.anilist_id,
-  mal_id = EXCLUDED.mal_id, retired_at = NULL, release_id = EXCLUDED.release_id, updated_at = now()`;
+  mal_id = EXCLUDED.mal_id, score = EXCLUDED.score, retired_at = NULL, release_id = EXCLUDED.release_id, updated_at = now()`;
 
 const BATCH = 1000;
 
