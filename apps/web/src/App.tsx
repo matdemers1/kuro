@@ -10,6 +10,7 @@ import { ThisSeason } from './screens/ThisSeason.js';
 import { UpNext } from './screens/UpNext.js';
 import { You } from './screens/You.js';
 import { ChangeLog } from './screens/ChangeLog.js';
+import { Review } from './screens/Review/Review.js';
 
 /** The browser path, or '/' when rendering outside a browser (unit tests). */
 function currentPath(): string {
@@ -45,6 +46,7 @@ function Signed({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   else if (path === '/library') screen = <Library />;
   else if (path === '/you') screen = <You name={name} onSignOut={onSignOut} />;
   else if (path === '/you/changes') screen = <ChangeLog />;
+  else if (path === '/review') screen = <Review />;
   else screen = <UpNext />;
   return <AppShell path={path}>{screen}</AppShell>;
 }

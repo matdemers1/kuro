@@ -78,9 +78,14 @@ export class TitleIndex<T extends Titled> {
     const score = new Map<string, number>();
     const queryTokens = new Set<string>();
     for (const t of titles) {
-      for (const n of new Set([normalise(t), core(t)])) {
-        if (n === '') continue;
-        for (const id of this.exact.get(n) ?? []) score.set(id, (score.get(id) ?? 0) + 10);
+      // An exact hit on the whole title outranks one on its stripped core ("Show" for "Show Season 2").
+      const whole = normalise(t);
+      const stripped = core(t);
+      for (const [n, weight] of [[whole, 12], [stripped, 8]] as const) {
+        // A title with nothing but stop words and numbers ("Season 2") names nothing: some catalog
+        // entry lists it as a synonym, and it would match that.
+        if (n === '' || tokens(n).length === 0 || (n === stripped && stripped === whole && weight === 8)) continue;
+        for (const id of this.exact.get(n) ?? []) score.set(id, (score.get(id) ?? 0) + weight);
         for (const tok of tokens(n)) queryTokens.add(tok);
       }
     }

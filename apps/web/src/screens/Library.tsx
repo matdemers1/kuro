@@ -3,6 +3,7 @@ import { Poster, posterFor } from '../components/Poster.js';
 import { Screen } from '../components/ui.js';
 import { api } from '../lib/api.js';
 import { navigate } from '../lib/router.js';
+import { useReviewCount } from './Review/Review.js';
 
 interface ShowRow { showKey: string; title: string; status: string; watchedEpisodes: number; totalEpisodes: number; pinned: boolean }
 
@@ -12,12 +13,18 @@ const FILTERS = ['all', 'watching', 'paused', 'completed'] as const;
 export function Library() {
   const [shows, setShows] = useState<ShowRow[]>();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
+  const toReview = useReviewCount();
   useEffect(() => {
     void api<{ items: ShowRow[] }>('/api/shows').then((r) => { setShows(r.items); }, () => { setShows([]); });
   }, []);
   const visible = (shows ?? []).filter((s) => filter === 'all' || s.status === filter);
   return (
     <Screen kicker={shows === undefined ? 'Library' : `${String(shows.length)} shows`} title="Library" wide>
+      {toReview !== undefined && toReview > 0 && (
+        <button type="button" onClick={() => { navigate('/review'); }} className="self-start rounded-full border border-kin px-3 py-1 text-[13px] text-kin">
+          {toReview === 1 ? '1 season needs a match' : `${String(toReview)} seasons need a match`} →
+        </button>
+      )}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
         {FILTERS.map((f) => (
           <button key={f} type="button" aria-pressed={filter === f} onClick={() => { setFilter(f); }} className={`rounded-full px-3 py-1 text-[13px] capitalize ${filter === f ? 'bg-ink text-canvas' : 'border border-line-strong text-muted'}`}>

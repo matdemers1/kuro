@@ -4,11 +4,12 @@ import { join } from 'node:path';
 
 /**
  * Images, fetched once and kept (KURO-REQ-021). Content-addressed by a hash of the source URL on
- * the `images` volume, served by Kurō with a long cache. Only Crunchyroll's image hosts are ever
- * fetched, so the cache cannot be turned into a way to make the server request anything else.
+ * the `images` volume, served by Kurō with a long cache. Only Crunchyroll's image hosts and the
+ * catalog's (MyAnimeList's CDN, which anime-offline-database links) are ever fetched, so the cache
+ * cannot be turned into a way to make the server request anything else.
  */
 
-const ALLOWED_HOSTS = new Set(['imgsrv.crunchyroll.com', 'static.crunchyroll.com', 'img1.ak.crunchyroll.com']);
+const ALLOWED_HOSTS = new Set(['imgsrv.crunchyroll.com', 'static.crunchyroll.com', 'img1.ak.crunchyroll.com', 'cdn.myanimelist.net']);
 const MAX_BYTES = 5 * 1024 * 1024;
 
 export function allowedImageUrl(raw: string): URL | null {
