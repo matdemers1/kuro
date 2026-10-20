@@ -34,6 +34,9 @@ WORKDIR /app
 COPY --from=build /out ./
 COPY --from=build /repo/apps/web/dist ./public
 RUN mkdir -p /data/images /data/backups && chown -R node:node /data
+# Every runtime module must resolve from the production install: a package left in devDependencies
+# fails the build here instead of crash-looping the server at boot.
+RUN node --input-type=module -e "await import('/app/dist/app.js'); await import('/app/dist/jobs/queue.js');"
 USER node
 EXPOSE 3300
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=6 \
