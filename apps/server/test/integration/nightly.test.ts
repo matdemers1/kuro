@@ -40,6 +40,13 @@ describe('nightly sync (KURO-REQ-005)', () => {
   });
 });
 
+async function bootRequests(): Promise<[string, string][]> {
+  const requests: [string, string][] = [];
+  const queue: SyncQueue = { request: (userId, kind) => { requests.push([userId, kind]); return Promise.resolve(); }, stop: () => Promise.resolve() };
+  await resumeInterrupted({ db, sidecar: new CrSidecar('http://127.0.0.1:9'), secretKey: SECRET_KEY, log: pino({ level: 'silent' }) }, queue);
+  return requests;
+}
+
 describe('at boot', () => {
   it('resumes a cut-short backfill, and finishes a derivation a restart interrupted — on the sync queue', async () => {
     const midImport = await connection('b-mid@example.com', {});
@@ -49,10 +56,20 @@ describe('at boot', () => {
     await db.syncRun.create({ data: { crConnectionId: underived.connId, kind: 'backfill', status: 'succeeded' } });
     await db.syncRun.create({ data: { crConnectionId: settled.connId, kind: 'backfill', status: 'succeeded', derivedAt: new Date() } });
 
-    const requests: [string, string][] = [];
-    const queue: SyncQueue = { request: (userId, kind) => { requests.push([userId, kind]); return Promise.resolve(); }, stop: () => Promise.resolve() };
-    await resumeInterrupted({ db, sidecar: new CrSidecar('http://127.0.0.1:9'), secretKey: SECRET_KEY, log: pino({ level: 'silent' }) }, queue);
-    const mine = requests.filter(([u]) => [midImport.userId, underived.userId, settled.userId].includes(u));
-    expect(mine).toEqual([[midImport.userId, 'backfill'], [underived.userId, 'derive']]);
+    // Shows exist, so the boot rebuild has nothing to do here (the next test covers it).
+    await db.show.create({ data: { showKey: 'cr:BOOTSHOW', title: 'Boot', franchiseKey: 'fr:cr:BOOTSHOW', seriesIds: [], derivedAt: new Date() } });
+    try {
+      const mine = (await bootRequests()).filter(([u]) => [midImport.userId, underived.userId, settled.userId].includes(u));
+      expect(mine).toEqual([[midImport.userId, 'backfill'], [underived.userId, 'derive']]);
+    } finally {
+      await db.show.delete({ where: { showKey: 'cr:BOOTSHOW' } });
+    }
+  });
+
+  it('rebuilds at boot when there are no Shows yet — the first deploy of a new derived table', async () => {
+    const owner = await connection('b-noshows@example.com', { lastSuccessAt: new Date() });
+    await db.syncRun.create({ data: { crConnectionId: owner.connId, kind: 'backfill', status: 'succeeded', derivedAt: new Date() } });
+    await db.show.deleteMany();
+    expect((await bootRequests()).filter(([u]) => u === owner.userId)).toEqual([[owner.userId, 'match']]);
   });
 });
