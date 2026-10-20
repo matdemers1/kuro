@@ -442,3 +442,13 @@ model CatalogEntry {
   @@index([retiredAt])
   @@map("catalog_entry")
 }
+
+/// AniList's record for a catalog entry the owner has, fetched once and kept forever (KURO-ADR-002):
+/// typed relations for franchise grouping, and external links — Crunchyroll's among them — for matching.
+model AnilistMedia {
+  anilistId Int      @id @map("anilist_id")
+  payload   Json
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  @@map("anilist_media")
+}
