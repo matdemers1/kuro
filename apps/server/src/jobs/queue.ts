@@ -2,6 +2,8 @@ import PgBoss from 'pg-boss';
 import type { Logger } from '../logger.js';
 import { resolveCatalog } from '../cr/resolve.js';
 import { rebuildShows } from '../derive/rebuild.js';
+import type { Alerts } from '../push/sender.js';
+import { checkAlerts } from './alertsCheck.js';
 import { runSync, type SyncDeps, type SyncKind } from '../sync/run.js';
 
 /**
@@ -16,6 +18,7 @@ export interface SyncQueue {
 
 const QUEUE = 'cr-sync';
 const NIGHTLY = 'cr-sync-nightly';
+const ALERTS = 'alerts-check';
 
 /** 03:00 in the owner's time zone (KURO-REQ-005). */
 export const NIGHTLY_CRON = '0 3 * * *';
@@ -25,7 +28,7 @@ interface SyncJob {
   kind: SyncKind;
 }
 
-export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York'): Promise<SyncQueue> {
+export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log: Logger, timezone = 'America/New_York', alerts?: Alerts): Promise<SyncQueue> {
   const boss = new PgBoss({ connectionString: databaseUrl, schema: 'pgboss' });
   boss.on('error', (err: unknown) => {
     log.error({ err: err instanceof Error ? err.message : String(err) }, 'job queue error');
@@ -55,6 +58,14 @@ export async function startPgBossQueue(databaseUrl: string, deps: SyncDeps, log:
     }
   });
   log.info({ cron: NIGHTLY_CRON, timezone }, 'nightly sync scheduled');
+  // Hourly: session expired, blocked twice, stale over 36 hours (KURO-REQ-007..009).
+  if (alerts !== undefined) {
+    await boss.createQueue(ALERTS);
+    await boss.schedule(ALERTS, '17 * * * *', {}, { tz: timezone });
+    await boss.work(ALERTS, { batchSize: 1 }, async () => {
+      await checkAlerts(deps.db, alerts);
+    });
+  }
   return {
     async request(userId, kind) {
       await boss.send(QUEUE, { userId, kind } satisfies SyncJob, { singletonKey: userId, retryLimit: 0 });

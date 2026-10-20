@@ -7,6 +7,7 @@ import { audio, hours, se } from '../lib/format.js';
 import { navigate } from '../lib/router.js';
 import { CrunchyrollLink, type CrStatus } from './Settings/CrunchyrollLink.js';
 import { ImportProgress } from './ImportProgress.js';
+import { SyncBanner, useHealth } from './Settings/SyncHealth.js';
 
 export interface UpNextItem {
   showKey: string;
@@ -58,10 +59,12 @@ export function UpNext() {
     void api<{ items: UpNextItem[] }>('/api/up-next').then((r) => { setItems(r.items); }, () => { setItems([]); });
   }, []);
 
+  const health = useHealth();
   const groups = (items ?? []).reduce<Map<string, UpNextItem[]>>((m, i) => m.set(i.group, [...(m.get(i.group) ?? []), i]), new Map());
 
   return (
     <Screen kicker="Tonight" title="Up Next">
+      <SyncBanner health={health} />
       {cr !== undefined && !cr.linked && <CrunchyrollLink status={cr} onLinked={setCr} />}
       {cr?.linked === true && (items?.length ?? 0) === 0 && <ImportProgress />}
       {items === undefined && cr?.linked === true && <div aria-busy="true" className="h-32 animate-pulse rounded-[16px] bg-raised" />}

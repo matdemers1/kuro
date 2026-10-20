@@ -27,6 +27,10 @@ const Env = z.object({
   SYNC_TIMEZONE: z.string().default('America/New_York'),
   /** The sidecar, on the compose network only (KURO-REQ-056). */
   KURO_CR_URL: z.url().default('http://kuro-cr:8080'),
+  /** Web Push (KURO-ADR-010). Without them, alerts are recorded but not delivered. */
+  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+  VAPID_SUBJECT: z.string().default('mailto:owner@kuro.invalid'),
   D3AUTH_ISSUER: z.url().optional(),
   D3AUTH_CLIENT_ID: z.string().min(1).optional(),
   D3AUTH_CLIENT_SECRET: z.string().min(1).optional(),

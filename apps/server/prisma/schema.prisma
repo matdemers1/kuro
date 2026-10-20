@@ -335,6 +335,33 @@ model ShowPreference {
   @@map("show_preference")
 }
 
+// ─── Alerts (KURO-REQ-020, KURO-ADR-010) ──────────────────────────────────
+
+/// One installed PWA that accepted Web Push. Dropped when the push service says it is gone.
+model PushSubscription {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  endpoint  String    @unique
+  p256dh    String
+  auth      String
+  userAgent String?   @map("user_agent")
+  lastOkAt  DateTime? @map("last_ok_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("push_subscription")
+}
+
+/// Every alert ever sent, keyed so the same event never notifies twice.
+model Alert {
+  key       String   @id
+  title     String
+  body      String
+  url       String?
+  delivered Int      @default(0)
+  sentAt    DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  @@map("alert")
+}
+
 // ─── Change log (KURO-REQ-022) ───────────────────────────────────────────
 
 /// Every user mutation, with what it replaced, kept forever. Undo is a change-log operation: it

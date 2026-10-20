@@ -1,5 +1,21 @@
 {
   "extends": "../tsconfig.base.json",
-  "compilerOptions": { "types": ["node"], "noEmit": true, "module": "ESNext", "moduleResolution": "Bundler", "declaration": false },
-  "include": ["tests", "*.config.ts"]
+  "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "declaration": false,
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "tests",
+    "*.config.ts"
+  ]
 }

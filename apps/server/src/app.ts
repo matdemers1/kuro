@@ -12,6 +12,8 @@ import { crunchyrollRoutes } from './routes/crunchyroll.js';
 import { syncRoutes } from './routes/sync.js';
 import { upNextRoutes } from './routes/upNext.js';
 import { showRoutes } from './routes/shows.js';
+import { healthPanelRoutes, pushRoutes } from './routes/push.js';
+import { Alerts } from './push/sender.js';
 import type { SyncQueue } from './jobs/queue.js';
 
 export interface AppDeps {
@@ -29,6 +31,8 @@ export interface AppDeps {
     readonly sidecarUrl?: string | undefined;
     readonly sidecar?: CrSidecar;
     readonly queue?: SyncQueue;
+    readonly alerts?: Alerts;
+    readonly vapidPublicKey?: string | undefined;
   };
 }
 
@@ -73,6 +77,9 @@ export function createApp(deps: AppDeps): Express {
     if (queue !== undefined) app.use('/api/sync', syncRoutes({ db, queue }));
     app.use('/api/up-next', upNextRoutes(db));
     app.use('/api/shows', showRoutes(db));
+    const alerts = deps.core.alerts ?? new Alerts(db, null, log);
+    app.use('/api/push', pushRoutes({ db, alerts, publicKey: deps.core.vapidPublicKey }));
+    app.use('/api/health-panel', healthPanelRoutes(db));
   }
 
   if (deps.webDist !== undefined) {
