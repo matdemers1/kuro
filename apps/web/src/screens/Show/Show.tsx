@@ -31,6 +31,8 @@ interface ShowDetail {
   watchedEpisodes: number;
   totalEpisodes: number;
   remainingS: number;
+  /** Episodes out in the original but not yet in the owner's dub. */
+  dubLag?: number;
   next: null | { season: number | null; episode: number | null; title: string | null; audioLocale: string | null; watchUrl: string };
   episodes: Episode[];
   items?: { entryId: string; kind: 'season' | 'extra'; required: boolean; title: string; type: string; episodes: number; year: number | null }[];
@@ -131,6 +133,11 @@ export function Show({ showKey }: { showKey: string }) {
         <p className="font-mono text-[12px] text-muted">
           {show.next !== null ? `${se(show.next.season, show.next.episode)} next · ` : ''}{pct}% · {show.totalEpisodes - show.watchedEpisodes} episodes ({hours(show.remainingS)}) left
         </p>
+        {(show.dubLag ?? 0) > 0 && (
+          <p className="self-start rounded-full border border-info px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-info uppercase" role="status">
+            Dub {show.dubLag} behind{show.status === 'caught_up' ? ' — waiting on the dub' : ''}
+          </p>
+        )}
         {show.next !== null && (
           <a href={show.next.watchUrl} rel="noopener" className="inline-flex min-h-11 items-center justify-center rounded-full bg-shu px-5 text-[15px] font-bold text-on-accent">
             ▶ Watch {se(show.next.season, show.next.episode)}{show.next.audioLocale !== null ? ` (${audio(show.next.audioLocale)})` : ''}
