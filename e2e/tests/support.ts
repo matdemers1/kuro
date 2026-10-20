@@ -1,13 +1,18 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page } from '@playwright/test';
 
-/** oidc-provider's development login, then its consent screen when it asks. */
+/**
+ * oidc-provider's development login, then its consent screen when it asks. Wait for whichever comes
+ * next — the consent screen or Kurō's own page (every screen is a <main>; the issuer's are not) —
+ * rather than guessing how long a cold CI start takes to show consent.
+ */
 export async function signInAtIssuer(page: Page, subject: string) {
   await page.locator('input[name="login"]').fill(subject);
   await page.locator('input[name="password"]').fill('anything');
   await page.locator('button[type="submit"]').click();
   const consent = page.locator('button[type="submit"]', { hasText: /continue/i });
-  if (await consent.isVisible({ timeout: 3000 }).catch(() => false)) await consent.click();
+  await expect(consent.or(page.locator('main'))).toBeVisible({ timeout: 15_000 });
+  if (await consent.isVisible()) await consent.click();
 }
 
 /**
