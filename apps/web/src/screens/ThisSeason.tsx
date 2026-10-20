@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Poster, posterFor } from '../components/Poster.js';
+import { RecCard, useDismiss, type Rec } from './Discover.js';
 import { Screen } from '../components/ui.js';
 import { api } from '../lib/api.js';
 import { statusLabel } from '../lib/format.js';
@@ -21,20 +22,26 @@ interface ThisSeasonData {
   dubs: SeasonItem[];
   subs: SeasonItem[];
   missing: { showKey: string; title: string }[];
+  picks: { season: string; year: number; byFit: boolean; items: Rec[] };
   credit: { name: string; url: string } | null;
 }
 
 const DAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 
+const SEASON_NAME: Record<string, string> = { WINTER: 'Winter', SPRING: 'Spring', SUMMER: 'Summer', FALL: 'Fall' };
+
 /**
  * This Season (KURO-REQ-036, KURO-T-3.2): what lands this week, dubs first and the shows you are
  * watching on top; sub-only second. Credited to AnimeSchedule.net when its timetable is the source.
+ * Then the season's picks (KURO-REQ-047, KURO-T-4.5): new Shows this season, best fit first.
  */
 export function ThisSeason() {
   const [data, setData] = useState<ThisSeasonData | null>();
+  const [version, setVersion] = useState(0);
   useEffect(() => {
     void api<ThisSeasonData>('/api/this-season').then(setData, () => { setData(null); });
-  }, []);
+  }, [version]);
+  const { dismiss, notice } = useDismiss(() => { setVersion((v) => v + 1); });
 
   return (
     <Screen kicker={data === undefined || data === null ? 'This week' : `Week ${data.week.label.split('-W')[1] ?? ''}`} title="This Season" wide>
@@ -58,6 +65,21 @@ export function ThisSeason() {
             <section aria-labelledby="subs" className="flex flex-col gap-3">
               <h2 id="subs" className="text-[11px] font-medium tracking-[0.6px] text-faint uppercase">Sub only this week</h2>
               <SeasonList items={data.subs} />
+            </section>
+          )}
+          {data.picks.items.length > 0 && (
+            <section aria-labelledby="picks" className="flex flex-col gap-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <h2 id="picks" className="text-[11px] font-medium tracking-[0.6px] text-kin uppercase">
+                  {data.picks.byFit ? 'Picked for you' : 'New'} · {SEASON_NAME[data.picks.season] ?? ''} {data.picks.year}
+                </h2>
+                <button type="button" className="text-[13px] text-muted underline" onClick={() => { navigate('/discover'); }}>Discover more</button>
+              </div>
+              {!data.picks.byFit && <p className="text-[13px] text-muted">By score for now — rate a few shows and these sort by your taste.</p>}
+              {notice}
+              <ul className="grid gap-2 md:grid-cols-2">
+                {data.picks.items.map((r) => <RecCard key={r.entryId} rec={r} onDismiss={() => { dismiss(r); }} />)}
+              </ul>
             </section>
           )}
           {data.missing.length > 0 && (

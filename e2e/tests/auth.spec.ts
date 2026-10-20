@@ -93,6 +93,17 @@ test('Sign in with D3 Auth signs the linked owner in, by (iss, sub)', async ({ p
   await completeIssuerSignIn(page);
 });
 
+test('with nothing rated yet, Discover asks for ratings and the taste profile needs history (KURO-T-4.4)', async ({ page }) => {
+  await page.goto('/');
+  await signOut(page);
+  await page.getByRole('button', { name: 'Sign in with D3 Auth' }).click();
+  await completeIssuerSignIn(page);
+  await page.goto('/discover');
+  await expect(page.getByRole('heading', { name: 'Rate a few shows to tune this' })).toBeVisible();
+  await page.goto('/you/taste');
+  await expect(page.getByText('Needs history')).toBeVisible();
+});
+
 test('offline, the installed app opens read-only from its cache (KURO-REQ-019)', async ({ page, context }) => {
   await page.goto('/');
   const signIn = page.getByRole('form', { name: 'Sign in' });

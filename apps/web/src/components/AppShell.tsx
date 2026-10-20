@@ -13,6 +13,7 @@ const TABS = [
 function activeTab(path: string): string {
   if (path.startsWith('/show/') || path.startsWith('/franchise/') || path === '/review') return '/library';
   if (path.startsWith('/you/')) return '/you';
+  if (path === '/discover') return '/season';
   return TABS.find((t) => t.path === path)?.path ?? '/';
 }
 

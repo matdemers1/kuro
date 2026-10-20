@@ -2,13 +2,16 @@ import { Router } from 'express';
 import { isoWeek } from '../adapters/animeschedule.js';
 import { requireUser } from '../auth/middleware.js';
 import type { Db } from '../db.js';
+import { loadTaste, seasonPicks, type Rec } from '../recommend/load.js';
+import { MIN_SIGNALS, seasonOf } from '../recommend/model.js';
 import { weekKey } from '../schedule/refresh.js';
 
 /**
  * This Season (KURO-T-3.2): what lands this week, dubs first. From AnimeSchedule's timetables when
  * they are configured — every show airing, the owner's own on top — and otherwise from what the
  * owner's Crunchyroll shows released this week. Plus the coverage report (KURO-R-012): Watching
- * shows still airing that the timetable does not list.
+ * shows still airing that the timetable does not list. And the season's picks (KURO-T-4.5): new
+ * Shows this anime season, ordered by fit to the owner's taste.
  */
 
 const ORIGINAL = new Set(['ja-JP', 'zh-CN', 'ko-KR']);
@@ -48,6 +51,8 @@ export function thisSeasonRoutes(db: Db): Router {
       const { start, end } = weekBounds(now);
       const states = new Map((await db.showState.findMany({ select: { showKey: true, status: true, title: true } })).map((s) => [s.showKey, s]));
       const entries = await db.scheduleEntry.findMany({ where: { week } });
+      const taste = await loadTaste(db);
+      const picks: { season: string; year: number; byFit: boolean; items: Rec[] } = { ...seasonOf(now), byFit: taste.confident >= MIN_SIGNALS, items: seasonPicks(taste, now) };
 
       if (entries.length > 0) {
         // Timetable route → catalog entry → the owner's Show holding it.
@@ -75,7 +80,7 @@ export function thisSeasonRoutes(db: Db): Router {
         const ongoing = new Set((await db.catalogEntry.findMany({ where: { id: { in: airing.map((a) => a.catalogEntryId) }, status: 'ONGOING' }, select: { id: true } })).map((e) => e.id));
         const missing = [...new Set(airing.filter((a) => ongoing.has(a.catalogEntryId) && !listed.has(a.showKey)).map((a) => a.showKey))].map((k) => ({ showKey: k, title: states.get(k)?.title ?? k }));
 
-        res.json({ source: 'animeschedule', week: { label: week, start: start.toISOString(), end: end.toISOString() }, dubs, subs, missing, credit: { name: 'AnimeSchedule.net', url: 'https://animeschedule.net' } });
+        res.json({ source: 'animeschedule', week: { label: week, start: start.toISOString(), end: end.toISOString() }, dubs, subs, missing, picks, credit: { name: 'AnimeSchedule.net', url: 'https://animeschedule.net' } });
         return;
       }
 
@@ -93,7 +98,7 @@ export function thisSeasonRoutes(db: Db): Router {
       const dubs = released.filter((e) => e.audioLocale !== null && !ORIGINAL.has(e.audioLocale)).map(toItem).sort(byInterest);
       const dubbed = new Set(dubs.map((d) => d.showKey));
       const subs = released.filter((e) => e.audioLocale === null || ORIGINAL.has(e.audioLocale)).map(toItem).filter((s) => !dubbed.has(s.showKey)).sort(byInterest);
-      res.json({ source: 'crunchyroll', week: { label: `${String(isoWeek(now).year)}-W${String(isoWeek(now).week).padStart(2, '0')}`, start: start.toISOString(), end: end.toISOString() }, dubs, subs, missing: [], credit: null });
+      res.json({ source: 'crunchyroll', week: { label: `${String(isoWeek(now).year)}-W${String(isoWeek(now).week).padStart(2, '0')}`, start: start.toISOString(), end: end.toISOString() }, dubs, subs, missing: [], picks, credit: null });
     })().catch(next);
   });
   return router;

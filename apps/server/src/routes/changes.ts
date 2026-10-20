@@ -25,6 +25,23 @@ const UNDOABLE: Record<string, (db: Db, entityId: string, before: Record<string,
     await restoreQueue(db, (before['rows'] ?? []) as Awaited<ReturnType<typeof queueSnapshot>>);
     return 'ok';
   },
+  /** Not interested, taken back or put back, if it was not changed since. */
+  async rec_dismissal(db, catalogEntryId, before, after) {
+    const now = (await db.recDismissal.findUnique({ where: { catalogEntryId } })) !== null;
+    if (now !== (after['dismissed'] === true)) return 'moved_on';
+    if (before['dismissed'] === true) await db.recDismissal.create({ data: { catalogEntryId } });
+    else await db.recDismissal.deleteMany({ where: { catalogEntryId } });
+    return 'ok';
+  },
+  /** A taste-profile edit, back to the earlier one (or none), if it was not changed since. */
+  async taste_term(db, term, before, after) {
+    const now = (await db.tasteTerm.findUnique({ where: { term } }))?.adjust ?? null;
+    if (now !== (after['adjust'] ?? null)) return 'moved_on';
+    const adjust = typeof before['adjust'] === 'string' ? before['adjust'] : null;
+    if (adjust === null) await db.tasteTerm.deleteMany({ where: { term } });
+    else await db.tasteTerm.upsert({ where: { term }, create: { term, adjust }, update: { adjust } });
+    return 'ok';
+  },
   /** A rating, back to its earlier score (or none), if it was not changed since. */
   async rating(db, target, before, after) {
     const now = await db.rating.findUnique({ where: { target } });
