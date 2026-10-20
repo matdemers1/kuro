@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
@@ -10,7 +11,7 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
     println!("{{\"level\":\"info\",\"msg\":\"kuro-cr listening\",\"port\":{port}}}");
-    axum::serve(listener, kuro_cr::router())
+    axum::serve(listener, kuro_cr::router(Arc::new(kuro_cr::cr::LiveCr)))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })
