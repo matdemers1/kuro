@@ -5,6 +5,7 @@ import type { Db } from './db.js';
 import type { Logger } from './logger.js';
 import { authRoutes } from './routes/auth.js';
 import { oidcRoutes } from './routes/oidc.js';
+import { setupRoutes } from './routes/setup.js';
 
 export interface AppDeps {
   readonly version: string;
@@ -17,6 +18,7 @@ export interface AppDeps {
     readonly pepper: string;
     readonly oidc: OidcClient | null;
     readonly log: Logger;
+    readonly setupToken?: string | undefined;
   };
 }
 
@@ -37,6 +39,7 @@ export function createApp(deps: AppDeps): Express {
     app.use(attachAuth(db, { BASE_URL: baseUrl }));
     app.use('/auth', authRoutes({ ...deps.core, secure }));
     app.use('/auth/oidc', oidcRoutes({ db, baseUrl, secure, client: deps.core.oidc, log }));
+    app.use('/api/setup', setupRoutes({ ...deps.core, setupToken: deps.core.setupToken, secure }));
   }
 
   if (deps.webDist !== undefined) {

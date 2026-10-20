@@ -14,11 +14,11 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-export async function startApp(oidc: OidcClient | null = null): Promise<Harness> {
-  const db = createDb(process.env['DATABASE_URL'] ?? '');
+export async function startApp(oidc: OidcClient | null = null, setupToken?: string, databaseUrl?: string): Promise<Harness> {
+  const db = createDb(databaseUrl ?? process.env['DATABASE_URL'] ?? '');
   const app = createApp({
     version: 'test',
-    core: { db, baseUrl: 'http://localhost', secretKey: SECRET_KEY, pepper: PEPPER, oidc, log: pino({ level: 'silent' }) },
+    core: { db, baseUrl: 'http://localhost', secretKey: SECRET_KEY, pepper: PEPPER, oidc, log: pino({ level: 'silent' }), setupToken },
   });
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, () => {

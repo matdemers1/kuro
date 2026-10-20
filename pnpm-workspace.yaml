@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - e2e
 
 # Supply chain — the same policy Foreman and D3 Auth run. A package published in the last seven
 # days is not installed (most malicious releases are found and pulled inside that window); a

@@ -2,7 +2,7 @@
   "name": "kuro",
   "private": true,
   "version": "0.0.0",
-  "description": "Kurō — a self-hosted, single-user anime tracker: your Crunchyroll history, by show not by season",
+  "description": "Kur\u014d \u2014 a self-hosted, single-user anime tracker: your Crunchyroll history, by show not by season",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -13,9 +13,10 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "node --test scripts/scan-personal-data.test.mjs && pnpm -r --if-present test",
+    "test": "node --test scripts/scan-personal-data.test.mjs && pnpm -r --filter '!e2e' --if-present test",
     "build": "pnpm -r --if-present build",
-    "scan": "node scripts/scan-personal-data.mjs"
+    "scan": "node scripts/scan-personal-data.mjs",
+    "e2e": "pnpm --filter e2e test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
