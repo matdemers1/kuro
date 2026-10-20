@@ -7,7 +7,7 @@ let syncRunId = '';
 
 beforeAll(async () => {
   db = createDb(url);
-  const user = await db.user.create({ data: { email: 'owner@example.com', displayName: 'Owner' } });
+  const user = await db.user.create({ data: { email: 'vault-owner@example.com', displayName: 'Vault owner' } });
   const conn = await db.crConnection.create({
     data: {
       userId: user.id,
