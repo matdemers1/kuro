@@ -693,3 +693,34 @@ model BackupRun {
   @@index([startedAt])
   @@map("backup_run")
 }
+
+// ─── Shared lists ─────────────────────────────────────────────────────────
+
+/// A list of Shows the owner recommends, readable without signing in by anyone holding its link. The
+/// link's token is the only key: turning sharing off or making a new link kills the old one.
+model ShareList {
+  id        String          @id @default(uuid(7)) @db.Uuid
+  title     String
+  /// A word at the top of the list: who it is for, or where to start.
+  intro     String?
+  /// 32 random bytes, base64url; null while sharing is off.
+  token     String?         @unique
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  items     ShareListItem[]
+
+  @@map("share_list")
+}
+
+/// One Show on a shared list, in the owner's order, with an optional note for the reader.
+model ShareListItem {
+  listId   String    @map("list_id") @db.Uuid
+  showKey  String    @map("show_key")
+  position Int
+  note     String?
+  list     ShareList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@id([listId, showKey])
+  @@index([listId, position])
+  @@map("share_list_item")
+}

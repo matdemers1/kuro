@@ -10,19 +10,23 @@ import { join } from 'node:path';
  */
 
 const ALLOWED_HOSTS = new Set(['imgsrv.crunchyroll.com', 'static.crunchyroll.com', 'img1.ak.crunchyroll.com', 'cdn.myanimelist.net']);
+/** Crunchyroll now serves key art from its main site, under /imgsrv/; nothing else there is fetched. */
+const ALLOWED_PREFIXES: Record<string, string> = { 'www.crunchyroll.com': '/imgsrv/' };
 const MAX_BYTES = 5 * 1024 * 1024;
 
 export function allowedImageUrl(raw: string): URL | null {
   try {
     const url = new URL(raw);
-    return url.protocol === 'https:' && ALLOWED_HOSTS.has(url.hostname) ? url : null;
+    if (url.protocol !== 'https:') return null;
+    const prefix = ALLOWED_PREFIXES[url.hostname];
+    return ALLOWED_HOSTS.has(url.hostname) || (prefix !== undefined && url.pathname.startsWith(prefix)) ? url : null;
   } catch {
     return null;
   }
 }
 
 /** The best image at least `width` wide from Crunchyroll's nested image lists. */
-export function pickImage(images: unknown, kind: 'poster_tall' | 'thumbnail', width: number): string | null {
+export function pickImage(images: unknown, kind: 'poster_tall' | 'poster_wide' | 'thumbnail', width: number): string | null {
   const list = (images as Record<string, unknown> | null | undefined)?.[kind];
   if (!Array.isArray(list)) return null;
   const flat = (list as unknown[]).flat().filter((i): i is { source: string; width: number } => typeof (i as { source?: unknown }).source === 'string' && typeof (i as { width?: unknown }).width === 'number');

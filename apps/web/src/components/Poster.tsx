@@ -20,7 +20,14 @@ export function Poster({ title, src, className = '' }: { title: string; src?: st
   );
 }
 
+const isShowKey = (showKey: string) => showKey.startsWith('cr:') || showKey.startsWith('show:');
+
 /** A Show's poster: its Crunchyroll series' key art, whether it is matched (`show:`) or not (`cr:`). */
 export function posterFor(showKey: string): string | undefined {
-  return showKey.startsWith('cr:') || showKey.startsWith('show:') ? `/img/show/${encodeURIComponent(showKey)}/poster` : undefined;
+  return isShowKey(showKey) ? `/img/show/${encodeURIComponent(showKey)}/poster` : undefined;
+}
+
+/** A Show's wide key art, 16:9: the Show page's banner and Up Next's spotlight. */
+export function bannerFor(showKey: string): string | undefined {
+  return isShowKey(showKey) ? `/img/show/${encodeURIComponent(showKey)}/banner` : undefined;
 }

@@ -23,7 +23,8 @@ const fakeFetch = ((url: URL) => {
 describe('the image cache (KURO-REQ-021)', () => {
   it('only ever fetches from Crunchyroll image hosts, over https', () => {
     expect(allowedImageUrl('https://imgsrv.crunchyroll.com/cdn-cgi/image/w=240/poster.jpg')).not.toBeNull();
-    for (const bad of ['http://imgsrv.crunchyroll.com/x.jpg', 'https://evil.example/x.jpg', 'https://169.254.169.254/latest', 'not a url']) expect(allowedImageUrl(bad)).toBeNull();
+    expect(allowedImageUrl('https://www.crunchyroll.com/imgsrv/display/thumbnail/240x360/catalog/crunchyroll/a.png')).not.toBeNull();
+    for (const bad of ['http://imgsrv.crunchyroll.com/x.jpg', 'https://www.crunchyroll.com/account', 'https://www.crunchyroll.com/imgsrv/../account', 'https://evil.example/x.jpg', 'https://169.254.169.254/latest', 'not a url']) expect(allowedImageUrl(bad)).toBeNull();
   });
 
   it('fetches once and serves the second view from disk', async () => {

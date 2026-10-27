@@ -3,7 +3,7 @@ import { requireUser } from '../auth/middleware.js';
 import type { Db } from '../db.js';
 import { pickImage, type ImageCache } from '../images/cache.js';
 
-/** /img/series/:id/poster, /img/episode/:id/thumb and /img/catalog/:id — the only images the app shows. */
+/** /img/series/:id/poster, /img/show/:key/{poster,banner}, /img/episode/:id/thumb and /img/catalog/:id — the only images the app shows. */
 export function imageRoutes(db: Db, cache: ImageCache): Router {
   const router = Router();
   router.use(requireUser);
@@ -22,22 +22,30 @@ export function imageRoutes(db: Db, cache: ImageCache): Router {
     })().catch(next);
   };
 
-  router.get('/series/:id/poster', serve(async (id) => {
+  const seriesArt = async (id: string, kind: 'poster_tall' | 'poster_wide', width: number) => {
     const s = await db.crSeries.findUnique({ where: { id }, select: { raw: true } });
-    return pickImage((s?.raw as { images?: unknown } | undefined)?.images, 'poster_tall', 240);
-  }));
+    return pickImage((s?.raw as { images?: unknown } | undefined)?.images, kind, width);
+  };
+  // A Show's art is its first Crunchyroll series' (what the owner recognises from Crunchyroll).
+  const showSeries = async (key: string) => (key.startsWith('cr:') ? key.slice(3) : (await db.show.findUnique({ where: { showKey: key }, select: { seriesIds: true } }))?.seriesIds[0]);
+
+  // 480 wide: sharp at the Library grid's largest tile on a 2x screen.
+  router.get('/series/:id/poster', serve((id) => seriesArt(id, 'poster_tall', 480)));
 
   router.get('/episode/:id/thumb', serve(async (id) => {
     const e = await db.crEpisode.findUnique({ where: { id }, select: { raw: true } });
     return pickImage((e?.raw as { images?: unknown } | undefined)?.images, 'thumbnail', 320);
   }));
 
-  // A Show's poster is its first Crunchyroll series' (what the owner recognises from Crunchyroll).
   router.get('/show/:id/poster', serve(async (key) => {
-    const show = await db.show.findUnique({ where: { showKey: key }, select: { seriesIds: true } });
-    const seriesId = key.startsWith('cr:') ? key.slice(3) : show?.seriesIds[0];
-    const s = seriesId === undefined ? null : await db.crSeries.findUnique({ where: { id: seriesId }, select: { raw: true } });
-    return pickImage((s?.raw as { images?: unknown } | undefined)?.images, 'poster_tall', 240);
+    const seriesId = await showSeries(key);
+    return seriesId === undefined ? null : seriesArt(seriesId, 'poster_tall', 480);
+  }));
+
+  /** The wide key art, for a Show page's banner and Up Next's spotlight. */
+  router.get('/show/:id/banner', serve(async (key) => {
+    const seriesId = await showSeries(key);
+    return seriesId === undefined ? null : seriesArt(seriesId, 'poster_wide', 1200);
   }));
 
   router.get('/catalog/:id', serve(async (id) => (await db.catalogEntry.findUnique({ where: { id }, select: { picture: true } }))?.picture ?? null));

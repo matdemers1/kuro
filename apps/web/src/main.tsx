@@ -11,8 +11,9 @@ createRoot(root).render(
   </StrictMode>,
 );
 
-// Offline read-only cache (KURO-REQ-019); never in development, where it would cache stale builds.
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// Offline read-only cache (KURO-REQ-019); never in development, where it would cache stale builds,
+// and never for someone opening a shared list: they are a guest, not the owner's installed app.
+if ('serviceWorker' in navigator && import.meta.env.PROD && !window.location.pathname.startsWith('/s/')) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register('/sw.js');
   });

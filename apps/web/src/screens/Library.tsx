@@ -44,7 +44,7 @@ export function Library() {
     .sort((a, b) => a.title.localeCompare(b.title));
 
   return (
-    <Screen kicker={shows === undefined ? 'Library' : `${String(shows.length)} shows`} title="Library" wide>
+    <Screen kicker={shows === undefined ? 'Library' : `${String(shows.length)} shows`} title="Library" wide="full">
       {toReview !== undefined && toReview > 0 && (
         <button type="button" onClick={() => { navigate('/review'); }} className="self-start rounded-full border border-kin px-3 py-1 text-[13px] text-kin">
           {toReview === 1 ? '1 season needs a match' : `${String(toReview)} seasons need a match`} →
@@ -67,7 +67,7 @@ export function Library() {
       </div>
 
       {shows === undefined && (
-        <ul aria-busy="true" className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+        <ul aria-busy="true" className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 lg:gap-4">
           {Array.from({ length: 12 }, (_, i) => <li key={i} className="aspect-[108/152] w-full animate-pulse rounded-[10px] bg-raised" />)}
         </ul>
       )}
@@ -99,7 +99,7 @@ export function Library() {
 export function ShowGrid({ shows }: { shows: readonly ShowRow[] }) {
   if (shows.length === 0) return null;
   return (
-    <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+    <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 lg:gap-4">
       {shows.map((s) => (
         <li key={s.showKey}>
           <button type="button" onClick={() => { navigate(`/show/${encodeURIComponent(s.showKey)}`); }} className="flex w-full flex-col gap-1 text-left">

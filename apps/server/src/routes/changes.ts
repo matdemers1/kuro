@@ -5,6 +5,7 @@ import { rebuildShows } from '../derive/rebuild.js';
 import { record } from '../domain/changelog.js';
 import { restoreSeason, snapshot, type Snapshot } from './mappings.js';
 import { queueSnapshot, restoreQueue } from './rewatch.js';
+import { listSnapshot, restoreList, type ListSnapshot } from './shareLists.js';
 
 /**
  * The change log and undo (KURO-REQ-022). Undo restores an entry's `before`, writes its own entry
@@ -23,6 +24,12 @@ const UNDOABLE: Record<string, (db: Db, entityId: string, before: Record<string,
   async rewatch_queue(db, _id, before, after) {
     if (stable(await queueSnapshot(db)) !== stable(after['rows'])) return 'moved_on';
     await restoreQueue(db, (before['rows'] ?? []) as Awaited<ReturnType<typeof queueSnapshot>>);
+    return 'ok';
+  },
+  /** A shared list, back to exactly what it was — link, order and notes — if it has not changed since. */
+  async share_list(db, id, before, after) {
+    if (stable(await listSnapshot(db, id)) !== stable(after)) return 'moved_on';
+    await restoreList(db, id, before as unknown as ListSnapshot);
     return 'ok';
   },
   /** Skip filler, back to what it was, if it was not changed since. */
