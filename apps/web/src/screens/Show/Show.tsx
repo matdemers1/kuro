@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BackIcon, CheckIcon, EyeIcon, PinIcon } from '../../components/icons.js';
-import { Poster, posterFor } from '../../components/Poster.js';
+import { bannerFor, Poster, posterFor } from '../../components/Poster.js';
 import { Button } from '../../components/ui.js';
 import { api } from '../../lib/api.js';
 import { audio, hours, se, statusLabel } from '../../lib/format.js';
@@ -8,6 +8,7 @@ import { navigate } from '../../lib/router.js';
 import { GroupingEditor } from '../GroupingEditor/GroupingEditor.js';
 import { DROP_REASON, DropChooser, NoteBox, RatingRow, SeasonScore } from './Taste.js';
 import { AddToRewatch } from '../RewatchQueue.js';
+import { AddToShareList } from '../SharedLists.js';
 
 interface Episode {
   crEpisodeId: string;
@@ -128,14 +129,22 @@ export function Show({ showKey }: { showKey: string }) {
   };
 
   return (
-    <main className="mx-auto w-full max-w-2xl bg-canvas text-ink">
-      <header className="relative flex min-h-[220px] flex-col justify-end gap-1 overflow-hidden px-4 pt-14 pb-5">
-        <Poster title={show.title} src={posterFor(show.showKey)} className="absolute inset-0 rounded-none opacity-90" />
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/10" />
-        <button type="button" onClick={() => { window.history.back(); }} className="absolute top-4 left-3 text-on-accent" aria-label="Back"><BackIcon /></button>
-        <h1 className="relative font-display text-[28px] leading-[34px] font-bold text-on-accent">{show.title}</h1>
+    <main className="mx-auto w-full max-w-7xl bg-canvas text-ink">
+      <header className="relative isolate flex min-h-[240px] items-end gap-5 overflow-hidden px-4 pt-14 pb-5 sm:min-h-[300px] lg:min-h-[400px] lg:px-10 lg:pb-8">
+        <Poster title={show.title} src={bannerFor(show.showKey)} className="absolute inset-0 -z-10 rounded-none" />
+        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-black/90 via-black/50 to-black/10" />
+        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-black/80 via-black/30 via-50% to-transparent" />
+        <button type="button" onClick={() => { window.history.back(); }} className="absolute top-4 left-3 text-on-accent lg:left-8" aria-label="Back"><BackIcon /></button>
+        <Poster title={show.title} src={posterFor(show.showKey)} className="hidden aspect-[2/3] w-[132px] shrink-0 shadow-2xl ring-1 ring-white/10 sm:block lg:w-[184px]" />
+        <div className="flex min-w-0 flex-col gap-2">
+          <h1 className="font-display text-[28px] leading-[34px] font-bold text-on-accent drop-shadow lg:text-[44px] lg:leading-[50px]">{show.title}</h1>
+          {show.description !== null && <p className="line-clamp-3 hidden max-w-2xl text-[15px] text-white/80 drop-shadow sm:block">{show.description}</p>}
+        </div>
       </header>
-      <div className="flex flex-col gap-4 px-4 py-4">
+      {/* One column on a phone; from 1024px the episodes take the left and the owner's own notes the right. */}
+      <div className="flex flex-col gap-4 px-4 py-4 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-x-10 lg:px-10">
+        <div className="flex flex-col gap-4 lg:col-start-1">
+        {show.description !== null && <p className="text-[15px] text-muted sm:hidden">{show.description}</p>}
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full border border-shu px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] text-shu uppercase">{statusLabel(show.status)}</span>
           <button type="button" onClick={togglePin} aria-pressed={show.pinned} className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium tracking-[0.6px] uppercase ${show.pinned ? 'border-kin text-kin' : 'border-line-strong text-muted'}`}>
@@ -189,6 +198,8 @@ export function Show({ showKey }: { showKey: string }) {
             ▶ Watch {se(show.next.season, show.next.episode)}{show.next.audioLocale !== null ? ` (${audio(show.next.audioLocale)})` : ''}
           </a>
         )}
+        </div>
+        <aside className="flex flex-col gap-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
         {(show.items?.length ?? 0) > 0 && (
           <section aria-labelledby="parts" className="flex flex-col gap-2">
             <h2 id="parts" className="text-[11px] font-medium tracking-[0.6px] text-faint uppercase">Seasons &amp; extras</h2>
@@ -227,6 +238,7 @@ export function Show({ showKey }: { showKey: string }) {
             <AddToRewatch showKey={show.showKey} seasons={(show.items ?? []).filter((i) => i.kind === 'season').map((i) => ({ entryId: i.entryId, title: i.title }))} onAdded={() => { setReload((n) => n + 1); }} />
           )
         )}
+        <AddToShareList showKey={show.showKey} title={show.title} />
         <RatingRow label="Your rating" score={show.rating ?? null} onRate={(score) => { rate('/rating', score, (cur) => ({ ...cur, rating: score })); }} />
         <NoteBox key={show.showKey} showKey={show.showKey} initial={show.note ?? null} />
         {(show.items?.length ?? 0) > 0 && !editing && (
@@ -243,6 +255,8 @@ export function Show({ showKey }: { showKey: string }) {
             }}
           />
         )}
+        </aside>
+        <div className="flex flex-col gap-4 lg:col-start-1">
         {tabs.length > 1 && (
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="Seasons">
             {tabs.map(([key]) => (
@@ -274,6 +288,7 @@ export function Show({ showKey }: { showKey: string }) {
             </div>
           </section>
         )}
+        </div>
       </div>
     </main>
   );

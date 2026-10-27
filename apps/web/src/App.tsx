@@ -15,6 +15,8 @@ import { You } from './screens/You.js';
 import { ChangeLog } from './screens/ChangeLog.js';
 import { Review } from './screens/Review/Review.js';
 import { Franchise } from './screens/Franchise.js';
+import { PublicList } from './screens/PublicList.js';
+import { SharedListEditor, SharedLists } from './screens/SharedLists.js';
 
 /** The browser path, or '/' when rendering outside a browser (unit tests). */
 function currentPath(): string {
@@ -22,6 +24,13 @@ function currentPath(): string {
 }
 
 export function App({ initial }: { initial?: SessionInfo }) {
+  // A shared list opens for anyone with its link: no session, no sign-in, no app around it.
+  const path = currentPath();
+  if (path.startsWith('/s/')) return <PublicList token={decodeURIComponent(path.slice('/s/'.length))} />;
+  return <Owner {...(initial === undefined ? {} : { initial })} />;
+}
+
+function Owner({ initial }: { initial?: SessionInfo }) {
   const [session, setSession] = useState<SessionInfo | undefined>(initial);
   const [setupDone, setSetupDone] = useState(false);
   const refresh = useCallback(() => {
@@ -52,6 +61,8 @@ function Signed({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   else if (path === '/you/changes') screen = <ChangeLog />;
   else if (path === '/you/taste') screen = <TasteProfile />;
   else if (path === '/you/stats') screen = <Stats />;
+  else if (path === '/you/lists') screen = <SharedLists />;
+  else if (path.startsWith('/you/lists/')) screen = <SharedListEditor key={path} id={decodeURIComponent(path.slice('/you/lists/'.length))} />;
   else if (/^\/you\/year\/\d{4}$/.test(path)) screen = <YearInReview key={path} year={Number(path.slice('/you/year/'.length))} />;
   else if (path === '/discover') screen = <Discover />;
   else if (path === '/review') screen = <Review />;

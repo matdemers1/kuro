@@ -50,6 +50,7 @@ export function You({ name, onSignOut }: { name: string; onSignOut: () => void }
       {cr?.linked === true && <RewatchQueue />}
       {cr?.linked === true && <Button kind="ghost" onClick={() => { navigate('/you/stats'); }}>Stats and year in review</Button>}
       {cr?.linked === true && <Button kind="ghost" onClick={() => { navigate('/you/taste'); }}>Your taste</Button>}
+      {cr?.linked === true && <Button kind="ghost" onClick={() => { navigate('/you/lists'); }}>Shared lists</Button>}
       <Button kind="ghost" onClick={() => { navigate('/you/changes'); }}>Change log</Button>
       {cr?.linked === true && <ExportLinks />}
       <p className="text-[13px] text-faint">Signed in as {name}.</p>
